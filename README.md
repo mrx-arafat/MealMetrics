@@ -19,7 +19,7 @@
 
 ## Overview
 
-MealMetrics is an intelligent Telegram bot that revolutionizes how you track your daily nutrition. Simply send a photo of your meal, and our advanced AI will analyze the food, estimate calories, and provide detailed nutritional insights with witty recommendations.
+MealMetrics is an intelligent Telegram bot that revolutionizes how you track your daily nutrition. Simply send a photo of your meal, and our advanced AI will analyze the food, estimate calories, and provide detailed nutritional insights with cool recommendations.
 
 ### Key Features
 
