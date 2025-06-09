@@ -17,10 +17,14 @@ class VisionAnalyzer:
         self.model = Config.OPENROUTER_MODEL
         self.base_url = Config.OPENROUTER_BASE_URL
         
-    def analyze_food_image(self, image: Image.Image) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    def analyze_food_image(self, image: Image.Image, caption: Optional[str] = None) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """
         Analyze a food image and return calorie estimation
-        
+
+        Args:
+            image: PIL Image object of the food
+            caption: Optional user-provided caption with additional details
+
         Returns:
             Tuple of (analysis_result, error_message)
         """
@@ -31,12 +35,37 @@ class VisionAnalyzer:
             # Convert image to base64
             image_base64 = pil_image_to_base64(processed_image, format="JPEG")
             
+            # Prepare the enhanced prompt with caption context
+            enhanced_prompt = CALORIE_ANALYSIS_PROMPT
+            if caption:
+                enhanced_prompt += f"""
+
+🚨🚨🚨 OVERRIDE ALL VISUAL ANALYSIS - USER KNOWS BEST 🚨🚨🚨
+The user explicitly stated: "{caption}"
+
+🔒 LOCKED-IN FOOD IDENTIFICATION:
+- FOOD TYPE: Extract the exact food name from user's caption
+- QUANTITY: Use user's specified amount
+- MODIFICATIONS: Honor all user specifications
+
+⚠️ CRITICAL RULES - NO EXCEPTIONS:
+1. **NEVER CHANGE THE FOOD NAME** - If user says "mango juice", your response MUST say "mango juice"
+2. **IGNORE VISUAL CONTRADICTIONS** - Even if image looks like orange juice, it's mango juice if user says so
+3. **COPY USER'S EXACT WORDS** - Don't paraphrase or "correct" their food identification
+4. **USER IS THE EXPERT** - They know what they're eating better than any AI visual analysis
+5. **IMAGE = PORTION SIZE ONLY** - Use visual only for estimating how much, not what it is
+
+🎯 YOUR TASK: Analyze the nutritional content of "{caption}" using the image only to estimate portion size.
+
+DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
+"""
+
             # Prepare the API request
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json"
             }
-            
+
             payload = {
                 "model": self.model,
                 "messages": [
@@ -45,7 +74,7 @@ class VisionAnalyzer:
                         "content": [
                             {
                                 "type": "text",
-                                "text": CALORIE_ANALYSIS_PROMPT
+                                "text": enhanced_prompt
                             },
                             {
                                 "type": "image_url",
@@ -56,8 +85,8 @@ class VisionAnalyzer:
                         ]
                     }
                 ],
-                "max_tokens": 1000,
-                "temperature": 0.3  # Lower temperature for more consistent results
+                "max_tokens": 1500,  # Increased for more detailed analysis
+                "temperature": 0.2   # Even lower temperature for more consistent results with context
             }
             
             # Make API request
@@ -112,6 +141,24 @@ class VisionAnalyzer:
                         error_msg = f"Missing required field in AI response: {field}"
                         logger.error(error_msg)
                         return None, error_msg
+
+                # Set default values for new optional fields if missing
+                if 'health_category' not in analysis_result:
+                    analysis_result['health_category'] = 'moderate'
+                if 'health_score' not in analysis_result:
+                    analysis_result['health_score'] = 5
+                if 'witty_comment' not in analysis_result:
+                    analysis_result['witty_comment'] = ''
+                if 'recommendations' not in analysis_result:
+                    analysis_result['recommendations'] = ''
+                if 'fun_fact' not in analysis_result:
+                    analysis_result['fun_fact'] = ''
+                if 'total_carbs' not in analysis_result:
+                    analysis_result['total_carbs'] = 0
+                if 'total_protein' not in analysis_result:
+                    analysis_result['total_protein'] = 0
+                if 'total_fat' not in analysis_result:
+                    analysis_result['total_fat'] = 0
                 
                 # Ensure numeric fields are properly typed
                 analysis_result['total_calories'] = float(analysis_result['total_calories'])
@@ -184,31 +231,99 @@ class VisionAnalyzer:
             return None, error_msg
     
     def format_analysis_for_user(self, analysis: Dict[str, Any]) -> str:
-        """Format analysis result for user display"""
+        """Format enhanced analysis result for user display"""
         try:
-            # Escape special markdown characters in the description
-            description = analysis['description'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]')
+            # Escape special markdown characters
+            def escape_markdown(text):
+                if not text:
+                    return ""
+                return str(text).replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]')
 
-            message = f"🍽️ *{description}*\n\n"
-            message += f"🔥 *Estimated Calories:* {analysis['total_calories']:.0f}\n"
-            message += f"📊 *Confidence:* {analysis['confidence']:.0f}%\n\n"
+            description = escape_markdown(analysis['description'])
 
-            if 'food_items' in analysis and analysis['food_items']:
-                message += "*Breakdown:*\n"
-                for item in analysis['food_items']:
-                    item_name = item['name'].replace('*', '\\*').replace('_', '\\_')
-                    portion = item.get('portion', 'unknown portion').replace('*', '\\*').replace('_', '\\_')
-                    message += f"• {item_name} ({portion}): {item['calories']} cal\n"
+            # Health category emoji mapping
+            health_emojis = {
+                'healthy': '🥗',
+                'moderate': '🍽️',
+                'junk': '🍔'
+            }
+
+            health_category = analysis.get('health_category', 'moderate')
+            health_emoji = health_emojis.get(health_category, '🍽️')
+            health_score = analysis.get('health_score', 5)
+
+            # Build message with enhanced formatting
+            message = ""
+
+            # Add user input acknowledgment if provided
+            if analysis.get('user_input_acknowledged'):
+                user_ack = escape_markdown(analysis['user_input_acknowledged'])
+                message += f"✅ *Analyzing your:* {user_ack}\n\n"
+
+            message += f"{health_emoji} *{description}*\n\n"
+
+            # Calories and health score
+            message += f"🔥 *Calories:* {analysis['total_calories']:.0f}\n"
+            message += f"� *Health Score:* {health_score}/10 {'⭐' * min(health_score, 5)}\n"
+            message += f"�📊 *Confidence:* {analysis['confidence']:.0f}%\n\n"
+
+            # Macronutrients if available
+            if analysis.get('total_carbs') or analysis.get('total_protein') or analysis.get('total_fat'):
+                message += "*Macronutrients:*\n"
+                if analysis.get('total_carbs'):
+                    message += f"🍞 Carbs: {analysis['total_carbs']:.0f}g\n"
+                if analysis.get('total_protein'):
+                    message += f"🥩 Protein: {analysis['total_protein']:.0f}g\n"
+                if analysis.get('total_fat'):
+                    message += f"🥑 Fat: {analysis['total_fat']:.0f}g\n"
                 message += "\n"
 
-            if 'notes' in analysis and analysis['notes']:
-                notes = analysis['notes'].replace('*', '\\*').replace('_', '\\_')
-                message += f"*Notes:* {notes}\n\n"
+            # Detailed food breakdown
+            if 'food_items' in analysis and analysis['food_items']:
+                message += "*Detailed Breakdown:*\n"
+                for item in analysis['food_items']:
+                    item_name = escape_markdown(item['name'])
+                    portion = escape_markdown(item.get('portion', 'unknown portion'))
+                    calories = item.get('calories', 0)
+                    cooking_method = escape_markdown(item.get('cooking_method', ''))
+                    item_health = item.get('health_score', 5)
+
+                    health_stars = '⭐' * min(item_health, 3) if item_health <= 5 else '✨' * min(item_health - 5, 3)
+
+                    message += f"• {item_name} ({portion})\n"
+                    message += f"  🔥 {calories} cal"
+                    if cooking_method:
+                        message += f" | 👨‍🍳 {cooking_method}"
+                    message += f" | {health_stars}\n"
+                message += "\n"
+
+            # Witty comment for junk food or general advice
+            if analysis.get('witty_comment'):
+                witty_comment = escape_markdown(analysis['witty_comment'])
+                if health_category == 'junk':
+                    message += f"😏 *AI Says:* {witty_comment}\n\n"
+                else:
+                    message += f"💡 *Insight:* {witty_comment}\n\n"
+
+            # Recommendations
+            if analysis.get('recommendations'):
+                recommendations = escape_markdown(analysis['recommendations'])
+                message += f"🎯 *Recommendations:* {recommendations}\n\n"
+
+            # Fun fact
+            if analysis.get('fun_fact'):
+                fun_fact = escape_markdown(analysis['fun_fact'])
+                message += f"🤓 *Fun Fact:* {fun_fact}\n\n"
+
+            # Additional notes
+            if analysis.get('notes'):
+                notes = escape_markdown(analysis['notes'])
+                message += f"📝 *Notes:* {notes}\n\n"
 
             message += "Would you like to log this meal? 📝"
 
             return message
 
         except Exception as e:
-            logger.error(f"Error formatting analysis for user: {e}")
+            logger.error(f"Error formatting enhanced analysis for user: {e}")
             return f"🍽️ Meal analyzed: {analysis.get('total_calories', 0):.0f} calories\nWould you like to log this meal?"

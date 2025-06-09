@@ -51,9 +51,11 @@ class BotHandlers:
             f"🍽️ Welcome to MealMetrics, {user.first_name}!\n\n"
             "I'm your personal calorie tracking assistant. Here's how I work:\n\n"
             "📸 **Send me a photo** of your meal\n"
+            "💬 **Add a caption** with details (optional but recommended!)\n"
             "🤖 **I'll analyze it** and estimate calories\n"
             "✅ **Choose to log or cancel** the meal\n"
             "📊 **Track your daily intake** automatically\n\n"
+            "💡 **Pro tip:** Add captions like '500ml mango juice without sugar' for super accurate results!\n\n"
             "Ready to start? Send me a photo of your meal! 📷"
         )
         
@@ -82,7 +84,9 @@ class BotHandlers:
             "• Take photos in good lighting\n"
             "• Include the entire meal in frame\n"
             "• Avoid blurry or dark photos\n"
-            "• Use standard plates/bowls when possible"
+            "• Use standard plates/bowls when possible\n"
+            "• Add captions with details like '500ml mango juice without sugar'\n"
+            "• Mention quantities, brands, or preparation methods"
         )
         
         await update.message.reply_text(
@@ -130,15 +134,24 @@ class BotHandlers:
         )
     
     async def handle_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle photo messages"""
+        """Handle photo messages with optional captions"""
         user_id = update.effective_user.id
         self.db.update_user_activity(user_id)
-        
-        # Send processing message
-        processing_msg = await update.message.reply_text(
-            "🔍 Analyzing your meal... This may take a moment.",
-            parse_mode=ParseMode.MARKDOWN
-        )
+
+        # Get caption if provided
+        caption = update.message.caption if update.message.caption else None
+
+        # Send processing message with caption acknowledgment
+        if caption:
+            processing_msg = await update.message.reply_text(
+                f"🔍 Analyzing your meal with details: *{caption}*\n\nThis may take a moment...",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            processing_msg = await update.message.reply_text(
+                "🔍 Analyzing your meal... This may take a moment.\n\n💡 *Tip: Add a caption with details like '500ml mango juice without sugar' for more accurate results!*",
+                parse_mode=ParseMode.MARKDOWN
+            )
         
         try:
             # Get the largest photo
@@ -159,8 +172,8 @@ class BotHandlers:
                     if image.mode != 'RGB':
                         image = image.convert('RGB')
                     
-                    # Analyze the image
-                    analysis_result, error = self.vision_analyzer.analyze_food_image(image)
+                    # Analyze the image with caption context
+                    analysis_result, error = self.vision_analyzer.analyze_food_image(image, caption)
                 
                 # Clean up temp file
                 os.unlink(temp_path)
