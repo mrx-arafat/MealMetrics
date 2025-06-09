@@ -1,0 +1,664 @@
+import logging
+import os
+import tempfile
+from datetime import datetime, date, timedelta
+from telegram import Update, Message
+from telegram.ext import ContextTypes
+from telegram.constants import ParseMode
+from PIL import Image
+
+from utils.config import Config
+from utils.helpers import validate_image_format, format_meal_summary, get_current_date, format_calories
+from database.models import DatabaseManager
+from database.operations import MealOperations
+from database.mysql_manager import MySQLDatabaseManager
+from database.mysql_operations import MySQLMealOperations
+from ai.vision_analyzer import VisionAnalyzer
+from .keyboards import BotKeyboards
+from .states import CallbackData
+
+logger = logging.getLogger(__name__)
+
+class BotHandlers:
+    """Message and callback handlers for the MealMetrics bot"""
+    
+    def __init__(self, db_manager):
+        """Initialize handlers with database manager"""
+        self.db = db_manager
+
+        # Initialize appropriate operations class based on database type
+        if isinstance(db_manager, MySQLDatabaseManager):
+            self.meal_ops = MySQLMealOperations(db_manager)
+        else:
+            self.meal_ops = MealOperations(db_manager)
+
+        self.vision_analyzer = VisionAnalyzer()
+        self.keyboards = BotKeyboards()
+    
+    async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /start command"""
+        user = update.effective_user
+        
+        # Create or update user in database
+        self.db.create_user(
+            user_id=user.id,
+            username=user.username,
+            first_name=user.first_name,
+            last_name=user.last_name
+        )
+        
+        welcome_message = (
+            f"🍽️ Welcome to MealMetrics, {user.first_name}!\n\n"
+            "I'm your personal calorie tracking assistant. Here's how I work:\n\n"
+            "📸 **Send me a photo** of your meal\n"
+            "🤖 **I'll analyze it** and estimate calories\n"
+            "✅ **Choose to log or cancel** the meal\n"
+            "📊 **Track your daily intake** automatically\n\n"
+            "Ready to start? Send me a photo of your meal! 📷"
+        )
+        
+        await update.message.reply_text(
+            welcome_message,
+            reply_markup=self.keyboards.main_menu(),
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /help command"""
+        help_message = (
+            "🤖 **MealMetrics Help**\n\n"
+            "**How to use:**\n"
+            "1. Take a clear photo of your meal\n"
+            "2. Send the photo to me\n"
+            "3. I'll analyze and estimate calories\n"
+            "4. Choose to log the meal or cancel\n\n"
+            "**Commands:**\n"
+            "/start - Start the bot\n"
+            "/help - Show this help\n"
+            "/menu - Show main menu\n"
+            "/today - Today's summary\n"
+            "/stats - Weekly statistics\n\n"
+            "**Tips for better accuracy:**\n"
+            "• Take photos in good lighting\n"
+            "• Include the entire meal in frame\n"
+            "• Avoid blurry or dark photos\n"
+            "• Use standard plates/bowls when possible"
+        )
+        
+        await update.message.reply_text(
+            help_message,
+            reply_markup=self.keyboards.help_menu(),
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    async def menu_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /menu command"""
+        await update.message.reply_text(
+            "🏠 **Main Menu**\n\nChoose an option:",
+            reply_markup=self.keyboards.main_menu(),
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    async def today_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /today command"""
+        user_id = update.effective_user.id
+        self.db.update_user_activity(user_id)
+        
+        meals_today = self.meal_ops.get_user_meals_today(user_id)
+        summary = format_meal_summary(meals_today)
+        
+        await update.message.reply_text(
+            summary,
+            reply_markup=self.keyboards.back_to_menu(),
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    async def stats_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /stats command"""
+        await update.message.reply_text(
+            "📊 **Statistics**\n\nChoose a time period:",
+            reply_markup=self.keyboards.stats_options(),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    async def clear_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /clear command"""
+        await update.message.reply_text(
+            "🗑️ **Data Management**\n\nChoose an option:",
+            reply_markup=self.keyboards.data_management(),
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    async def handle_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle photo messages"""
+        user_id = update.effective_user.id
+        self.db.update_user_activity(user_id)
+        
+        # Send processing message
+        processing_msg = await update.message.reply_text(
+            "🔍 Analyzing your meal... This may take a moment.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+        try:
+            # Get the largest photo
+            photo = update.message.photo[-1]
+            
+            # Download photo
+            photo_file = await photo.get_file()
+            
+            # Create temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as temp_file:
+                await photo_file.download_to_drive(temp_file.name)
+                temp_path = temp_file.name
+            
+            try:
+                # Open and process image
+                with Image.open(temp_path) as image:
+                    # Convert to RGB if necessary
+                    if image.mode != 'RGB':
+                        image = image.convert('RGB')
+                    
+                    # Analyze the image
+                    analysis_result, error = self.vision_analyzer.analyze_food_image(image)
+                
+                # Clean up temp file
+                os.unlink(temp_path)
+                
+                if error:
+                    await processing_msg.edit_text(
+                        f"❌ Sorry, I couldn't analyze your meal: {error}\n\n"
+                        "Please try again with a clearer photo.",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                    return
+                
+                if not analysis_result:
+                    await processing_msg.edit_text(
+                        "❌ Sorry, I couldn't analyze your meal. Please try again with a clearer photo.",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                    return
+                
+                # Store pending meal
+                meal_id = self.db.add_pending_meal(
+                    user_id=user_id,
+                    description=analysis_result['description'],
+                    calories=analysis_result['total_calories'],
+                    confidence=analysis_result['confidence']
+                )
+                
+                if not meal_id:
+                    await processing_msg.edit_text(
+                        "❌ Sorry, there was an error processing your meal. Please try again.",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                    return
+                
+                # Format and send analysis
+                analysis_text = self.vision_analyzer.format_analysis_for_user(analysis_result)
+                
+                await processing_msg.edit_text(
+                    analysis_text,
+                    reply_markup=self.keyboards.meal_confirmation(meal_id),
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                
+            except Exception as e:
+                # Clean up temp file on error
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+                raise e
+                
+        except Exception as e:
+            logger.error(f"Error processing photo for user {user_id}: {e}")
+            await processing_msg.edit_text(
+                "❌ Sorry, there was an error processing your photo. Please try again.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+    
+    async def handle_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle text messages"""
+        user_id = update.effective_user.id
+        self.db.update_user_activity(user_id)
+        
+        text = update.message.text.lower()
+        
+        if any(word in text for word in ['hi', 'hello', 'hey', 'start']):
+            await self.start_command(update, context)
+        elif any(word in text for word in ['help', 'how', 'what']):
+            await self.help_command(update, context)
+        elif any(word in text for word in ['menu', 'options']):
+            await self.menu_command(update, context)
+        elif any(word in text for word in ['today', 'summary']):
+            await self.today_command(update, context)
+        elif any(word in text for word in ['stats', 'statistics']):
+            await self.stats_command(update, context)
+        else:
+            await update.message.reply_text(
+                "📸 Please send me a photo of your meal to get started!\n\n"
+                "Or use /help to see what I can do.",
+                reply_markup=self.keyboards.main_menu(),
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+    async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle callback queries from inline keyboards"""
+        query = update.callback_query
+        user_id = query.from_user.id
+        self.db.update_user_activity(user_id)
+
+        await query.answer()  # Acknowledge the callback
+
+        action, params = CallbackData.parse_callback(query.data)
+
+        try:
+            if action == CallbackData.LOG_MEAL:
+                await self._handle_log_meal(query, params[0] if params else None)
+            elif action == CallbackData.CANCEL_MEAL:
+                await self._handle_cancel_meal(query, params[0] if params else None)
+            elif action == CallbackData.MAIN_MENU:
+                await self._handle_main_menu(query)
+            elif action == CallbackData.TODAY_SUMMARY:
+                await self._handle_today_summary(query)
+            elif action == CallbackData.WEEKLY_STATS:
+                await self._handle_weekly_stats(query)
+            elif action == CallbackData.VIEW_HISTORY:
+                await self._handle_view_history(query)
+            elif action == CallbackData.HELP:
+                await self._handle_help(query)
+            elif action == CallbackData.MANAGE_DATA:
+                await self._handle_manage_data(query)
+            elif action == CallbackData.DATA_SUMMARY:
+                await self._handle_data_summary(query)
+            elif action == CallbackData.CLEAR_TODAY:
+                await self._handle_clear_today_confirm(query)
+            elif action == CallbackData.CLEAR_ALL_CONFIRM:
+                await self._handle_clear_all_confirm(query)
+            elif action == CallbackData.CONFIRM_CLEAR_TODAY:
+                await self._handle_confirm_clear_today(query)
+            elif action == CallbackData.CONFIRM_CLEAR_ALL:
+                await self._handle_confirm_clear_all(query)
+            elif action.startswith("help_"):
+                await self._handle_help_section(query, action)
+            elif action.startswith("stats_"):
+                await self._handle_stats_section(query, action)
+            else:
+                await query.edit_message_text(
+                    "❌ Unknown action. Please try again.",
+                    reply_markup=self.keyboards.main_menu()
+                )
+        except Exception as e:
+            logger.error(f"Error handling callback {query.data} for user {user_id}: {e}")
+            await query.edit_message_text(
+                "❌ An error occurred. Please try again.",
+                reply_markup=self.keyboards.main_menu()
+            )
+
+    async def _handle_log_meal(self, query, meal_id_str):
+        """Handle meal logging confirmation"""
+        if not meal_id_str:
+            await query.edit_message_text(
+                "❌ Invalid meal ID. Please try again.",
+                reply_markup=self.keyboards.main_menu()
+            )
+            return
+
+        try:
+            meal_id = int(meal_id_str)
+            user_id = query.from_user.id
+
+            # Get pending meal
+            pending_meal = self.db.get_pending_meal(user_id, meal_id)
+            if not pending_meal:
+                await query.edit_message_text(
+                    "❌ Meal not found or already processed.",
+                    reply_markup=self.keyboards.main_menu()
+                )
+                return
+
+            # Log the meal
+            success = self.meal_ops.log_meal(
+                user_id=user_id,
+                description=pending_meal['description'],
+                calories=pending_meal['calories'],
+                confidence=pending_meal['confidence']
+            )
+
+            if success:
+                # Delete pending meal
+                self.db.delete_pending_meal(user_id, meal_id)
+
+                # Get updated daily summary
+                meals_today = self.meal_ops.get_user_meals_today(user_id)
+                total_today = sum(meal['calories'] for meal in meals_today)
+
+                success_message = (
+                    f"✅ **Meal logged successfully!**\n\n"
+                    f"🍽️ {pending_meal['description']}\n"
+                    f"🔥 {format_calories(pending_meal['calories'])}\n\n"
+                    f"📊 **Today's total:** {format_calories(total_today)}\n"
+                    f"📝 **Meals logged today:** {len(meals_today)}"
+                )
+
+                await query.edit_message_text(
+                    success_message,
+                    reply_markup=self.keyboards.main_menu(),
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            else:
+                await query.edit_message_text(
+                    "❌ Failed to log meal. Please try again.",
+                    reply_markup=self.keyboards.main_menu()
+                )
+
+        except ValueError:
+            await query.edit_message_text(
+                "❌ Invalid meal ID format.",
+                reply_markup=self.keyboards.main_menu()
+            )
+
+    async def _handle_cancel_meal(self, query, meal_id_str):
+        """Handle meal cancellation"""
+        if not meal_id_str:
+            await query.edit_message_text(
+                "❌ Invalid meal ID.",
+                reply_markup=self.keyboards.main_menu()
+            )
+            return
+
+        try:
+            meal_id = int(meal_id_str)
+            user_id = query.from_user.id
+
+            # Delete pending meal
+            success = self.db.delete_pending_meal(user_id, meal_id)
+
+            if success:
+                await query.edit_message_text(
+                    "❌ **Meal cancelled.**\n\nSend me another photo when you're ready to track a meal!",
+                    reply_markup=self.keyboards.main_menu(),
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            else:
+                await query.edit_message_text(
+                    "❌ Meal not found or already processed.",
+                    reply_markup=self.keyboards.main_menu()
+                )
+
+        except ValueError:
+            await query.edit_message_text(
+                "❌ Invalid meal ID format.",
+                reply_markup=self.keyboards.main_menu()
+            )
+
+    async def _handle_main_menu(self, query):
+        """Handle main menu display"""
+        await query.edit_message_text(
+            "🏠 **Main Menu**\n\nChoose an option:",
+            reply_markup=self.keyboards.main_menu(),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    async def _handle_today_summary(self, query):
+        """Handle today's summary display"""
+        user_id = query.from_user.id
+        meals_today = self.meal_ops.get_user_meals_today(user_id)
+        summary = format_meal_summary(meals_today)
+
+        await query.edit_message_text(
+            summary,
+            reply_markup=self.keyboards.back_to_menu(),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    async def _handle_weekly_stats(self, query):
+        """Handle weekly statistics display"""
+        user_id = query.from_user.id
+        stats = self.meal_ops.get_user_stats(user_id, days=7)
+
+        if not stats or stats.get('days_tracked', 0) == 0:
+            message = "📊 **Weekly Statistics**\n\nNo meals logged in the past 7 days.\nStart tracking by sending me a photo of your meal!"
+        else:
+            message = (
+                f"📊 **Weekly Statistics (Last 7 Days)**\n\n"
+                f"🔥 **Total Calories:** {format_calories(stats['total_calories'])}\n"
+                f"🍽️ **Total Meals:** {stats['total_meals']}\n"
+                f"📅 **Days Tracked:** {stats['days_tracked']}/7\n"
+                f"📈 **Avg Calories/Day:** {format_calories(stats['avg_calories_per_day'])}\n"
+                f"🍽️ **Avg Meals/Day:** {stats['avg_meals_per_day']:.1f}"
+            )
+
+        await query.edit_message_text(
+            message,
+            reply_markup=self.keyboards.back_to_menu(),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    async def _handle_view_history(self, query):
+        """Handle meal history viewing"""
+        # For now, show today's meals - can be extended for date navigation
+        await self._handle_today_summary(query)
+
+    async def _handle_help(self, query):
+        """Handle help menu display"""
+        help_message = (
+            "🤖 **MealMetrics Help**\n\n"
+            "**How to use:**\n"
+            "1. Take a clear photo of your meal\n"
+            "2. Send the photo to me\n"
+            "3. I'll analyze and estimate calories\n"
+            "4. Choose to log the meal or cancel\n\n"
+            "**Tips for better accuracy:**\n"
+            "• Take photos in good lighting\n"
+            "• Include the entire meal in frame\n"
+            "• Avoid blurry or dark photos\n"
+            "• Use standard plates/bowls when possible"
+        )
+
+        await query.edit_message_text(
+            help_message,
+            reply_markup=self.keyboards.help_menu(),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    async def _handle_help_section(self, query, action):
+        """Handle specific help sections"""
+        if action == "help_usage":
+            message = (
+                "📸 **How to Use MealMetrics**\n\n"
+                "1. **Take a photo** of your meal\n"
+                "   • Make sure the food is clearly visible\n"
+                "   • Include the entire meal in the frame\n"
+                "   • Use good lighting\n\n"
+                "2. **Send the photo** to me\n"
+                "   • I'll analyze it using AI\n"
+                "   • This usually takes 5-10 seconds\n\n"
+                "3. **Review the analysis**\n"
+                "   • Check the calorie estimate\n"
+                "   • Read the food breakdown\n\n"
+                "4. **Choose an action**\n"
+                "   • ✅ Log Meal - Add to your daily log\n"
+                "   • ❌ Cancel - Discard the analysis"
+            )
+        elif action == "help_troubleshoot":
+            message = (
+                "🔧 **Troubleshooting**\n\n"
+                "**If analysis fails:**\n"
+                "• Check your internet connection\n"
+                "• Try a clearer photo\n"
+                "• Make sure the image isn't too large\n"
+                "• Restart the bot with /start\n\n"
+                "**For better accuracy:**\n"
+                "• Use natural lighting\n"
+                "• Avoid shadows on food\n"
+                "• Include reference objects (plates, utensils)\n"
+                "• Take photos from above when possible"
+            )
+        elif action == "help_accuracy":
+            message = (
+                "📊 **About Accuracy**\n\n"
+                "**How it works:**\n"
+                "• AI analyzes your food photos\n"
+                "• Estimates portion sizes and ingredients\n"
+                "• Calculates calories based on nutritional data\n\n"
+                "**Accuracy factors:**\n"
+                "• Photo quality and lighting\n"
+                "• Visibility of all food items\n"
+                "• Cooking methods and ingredients\n"
+                "• Portion size estimation\n\n"
+                "**Tips:**\n"
+                "• Results are estimates, not exact measurements\n"
+                "• Use for general tracking and trends\n"
+                "• Consider logging cooking oils and sauces separately"
+            )
+        else:
+            message = "❌ Unknown help section."
+
+        await query.edit_message_text(
+            message,
+            reply_markup=self.keyboards.back_to_menu(),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    async def _handle_stats_section(self, query, action):
+        """Handle specific statistics sections"""
+        user_id = query.from_user.id
+
+        if action == "stats_today":
+            await self._handle_today_summary(query)
+        elif action == "stats_week":
+            await self._handle_weekly_stats(query)
+        elif action == "stats_month":
+            stats = self.meal_ops.get_user_stats(user_id, days=30)
+
+            if not stats or stats.get('days_tracked', 0) == 0:
+                message = "📊 **Monthly Statistics**\n\nNo meals logged in the past 30 days.\nStart tracking by sending me a photo of your meal!"
+            else:
+                message = (
+                    f"📊 **Monthly Statistics (Last 30 Days)**\n\n"
+                    f"🔥 **Total Calories:** {format_calories(stats['total_calories'])}\n"
+                    f"🍽️ **Total Meals:** {stats['total_meals']}\n"
+                    f"📅 **Days Tracked:** {stats['days_tracked']}/30\n"
+                    f"📈 **Avg Calories/Day:** {format_calories(stats['avg_calories_per_day'])}\n"
+                    f"🍽️ **Avg Meals/Day:** {stats['avg_meals_per_day']:.1f}"
+                )
+
+            await query.edit_message_text(
+                message,
+                reply_markup=self.keyboards.back_to_menu(),
+                parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            await query.edit_message_text(
+                "❌ Unknown statistics section.",
+                reply_markup=self.keyboards.back_to_menu()
+            )
+
+    async def _handle_manage_data(self, query):
+        """Handle data management menu"""
+        await query.edit_message_text(
+            "🗑️ **Data Management**\n\nChoose an option:",
+            reply_markup=self.keyboards.data_management(),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    async def _handle_data_summary(self, query):
+        """Handle data summary display"""
+        user_id = query.from_user.id
+        summary = self.meal_ops.get_user_data_summary(user_id)
+
+        if not summary or summary.get('total_meals', 0) == 0:
+            message = "📋 **Data Summary**\n\nNo meal data found.\nStart tracking by sending me a photo of your meal!"
+        else:
+            message = (
+                f"📋 **Data Summary**\n\n"
+                f"🍽️ **Total Meals:** {summary['total_meals']}\n"
+                f"📅 **Days with Data:** {summary['days_with_data']}\n"
+                f"🔥 **Total Calories:** {format_calories(summary['total_calories'])}\n\n"
+            )
+
+            if summary['first_meal_date'] and summary['last_meal_date']:
+                message += f"📆 **Date Range:** {summary['first_meal_date']} to {summary['last_meal_date']}\n"
+
+            if summary['days_with_data'] > 0:
+                avg_calories = summary['total_calories'] / summary['days_with_data']
+                avg_meals = summary['total_meals'] / summary['days_with_data']
+                message += f"📊 **Daily Average:** {format_calories(avg_calories)} ({avg_meals:.1f} meals/day)"
+
+        await query.edit_message_text(
+            message,
+            reply_markup=self.keyboards.data_management(),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    async def _handle_clear_today_confirm(self, query):
+        """Handle clear today confirmation"""
+        today = get_current_date()
+        message = (
+            f"⚠️ **Clear Today's Data**\n\n"
+            f"Are you sure you want to delete all meals logged for {today}?\n\n"
+            f"This action cannot be undone!"
+        )
+
+        await query.edit_message_text(
+            message,
+            reply_markup=self.keyboards.clear_confirmation("clear_today"),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    async def _handle_clear_all_confirm(self, query):
+        """Handle clear all data confirmation"""
+        user_id = query.from_user.id
+        summary = self.meal_ops.get_user_data_summary(user_id)
+
+        message = (
+            f"🚨 **Clear ALL Data**\n\n"
+            f"Are you sure you want to delete ALL your meal data?\n\n"
+            f"This will remove:\n"
+            f"• {summary.get('total_meals', 0)} meals\n"
+            f"• {summary.get('days_with_data', 0)} days of data\n"
+            f"• All statistics and history\n\n"
+            f"⚠️ **This action cannot be undone!**"
+        )
+
+        await query.edit_message_text(
+            message,
+            reply_markup=self.keyboards.clear_confirmation("clear_all"),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    async def _handle_confirm_clear_today(self, query):
+        """Handle confirmed clear today action"""
+        user_id = query.from_user.id
+        today = get_current_date()
+
+        success = self.meal_ops.clear_user_data_by_date(user_id, today)
+
+        if success:
+            message = f"✅ **Data Cleared**\n\nAll meals for {today} have been deleted."
+        else:
+            message = f"❌ **Error**\n\nFailed to clear data for {today}. Please try again."
+
+        await query.edit_message_text(
+            message,
+            reply_markup=self.keyboards.data_management(),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    async def _handle_confirm_clear_all(self, query):
+        """Handle confirmed clear all data action"""
+        user_id = query.from_user.id
+
+        success = self.meal_ops.clear_all_user_data(user_id)
+
+        if success:
+            message = "✅ **All Data Cleared**\n\nAll your meal data has been permanently deleted."
+        else:
+            message = "❌ **Error**\n\nFailed to clear all data. Please try again."
+
+        await query.edit_message_text(
+            message,
+            reply_markup=self.keyboards.main_menu(),
+            parse_mode=ParseMode.MARKDOWN
+        )
