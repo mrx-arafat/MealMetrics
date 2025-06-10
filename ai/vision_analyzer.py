@@ -241,11 +241,11 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
 
             description = escape_markdown(analysis['description'])
 
-            # Health category emoji mapping
+            # Health category emoji mapping with darker tone for junk food
             health_emojis = {
                 'healthy': '🥗',
                 'moderate': '🍽️',
-                'junk': '🍔'
+                'junk': '☠️'  # Skull emoji for reality check impact
             }
 
             health_category = analysis.get('health_category', 'moderate')
@@ -262,10 +262,27 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
 
             message += f"{health_emoji} *{description}*\n\n"
 
-            # Calories and health score
+            # Add special warning banner for junk food
+            if health_category == 'junk':
+                message += "🚨 *WARNING: HIGH-RISK FOOD DETECTED* 🚨\n"
+                message += "⚠️ *This meal may significantly impact your health* ⚠️\n\n"
+
+            # Calories and health score with enhanced impact for junk food
             message += f"🔥 *Calories:* {analysis['total_calories']:.0f}\n"
-            message += f"� *Health Score:* {health_score}/10 {'⭐' * min(health_score, 5)}\n"
-            message += f"�📊 *Confidence:* {analysis['confidence']:.0f}%\n\n"
+
+            # Enhanced health score display based on category
+            if health_category == 'junk':
+                if health_score <= 3:
+                    health_display = f"💀 *Health Score:* {health_score}/10 {'💀' * min(health_score, 3)} - DANGER ZONE"
+                else:
+                    health_display = f"⚠️ *Health Score:* {health_score}/10 {'⚠️' * min(health_score, 3)} - PROCEED WITH CAUTION"
+            elif health_category == 'healthy':
+                health_display = f"💚 *Health Score:* {health_score}/10 {'⭐' * min(health_score, 5)} - EXCELLENT CHOICE"
+            else:
+                health_display = f"💛 *Health Score:* {health_score}/10 {'⭐' * min(health_score, 5)}"
+
+            message += f"{health_display}\n"
+            message += f"📊 *Confidence:* {analysis['confidence']:.0f}%\n\n"
 
             # Macronutrients if available
             if analysis.get('total_carbs') or analysis.get('total_protein') or analysis.get('total_fat'):
@@ -278,52 +295,74 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
                     message += f"🥑 Fat: {analysis['total_fat']:.0f}g\n"
                 message += "\n"
 
-            # Detailed food breakdown
+            # Detailed food breakdown with enhanced formatting
             if 'food_items' in analysis and analysis['food_items']:
-                message += "*Detailed Breakdown:*\n"
-                for item in analysis['food_items']:
+                message += "🍽️ *Detailed Breakdown:*\n"
+                for i, item in enumerate(analysis['food_items'], 1):
                     item_name = escape_markdown(item['name'])
                     portion = escape_markdown(item.get('portion', 'unknown portion'))
                     calories = item.get('calories', 0)
                     cooking_method = escape_markdown(item.get('cooking_method', ''))
                     item_health = item.get('health_score', 5)
 
-                    health_stars = '⭐' * min(item_health, 3) if item_health <= 5 else '✨' * min(item_health - 5, 3)
+                    # Enhanced health indicator
+                    if item_health >= 8:
+                        health_indicator = "🟢 Excellent"
+                    elif item_health >= 6:
+                        health_indicator = "🟡 Good"
+                    elif item_health >= 4:
+                        health_indicator = "🟠 Moderate"
+                    else:
+                        health_indicator = "🔴 Poor"
 
-                    message += f"• {item_name} ({portion})\n"
-                    message += f"  🔥 {calories} cal"
+                    message += f"{i}. **{item_name}** ({portion})\n"
+                    message += f"   🔥 {calories} cal"
                     if cooking_method:
-                        message += f" | 👨‍🍳 {cooking_method}"
-                    message += f" | {health_stars}\n"
+                        message += f" • 👨‍🍳 {cooking_method}"
+                    message += f" • {health_indicator}\n"
                 message += "\n"
 
-            # Witty comment for junk food or general advice
+            # Enhanced witty comment section with darker reality checks for junk food
             if analysis.get('witty_comment'):
                 witty_comment = escape_markdown(analysis['witty_comment'])
                 if health_category == 'junk':
-                    message += f"😏 *AI Says:* {witty_comment}\n\n"
+                    message += f"💀 *REALITY CHECK:* {witty_comment}\n\n"
+                elif health_category == 'healthy':
+                    message += f"🌟 *Great Choice!* {witty_comment}\n\n"
                 else:
-                    message += f"💡 *Insight:* {witty_comment}\n\n"
+                    message += f"💡 *Nutritional Insight:* {witty_comment}\n\n"
 
-            # Recommendations
+            # Enhanced recommendations with urgent warnings for junk food
             if analysis.get('recommendations'):
                 recommendations = escape_markdown(analysis['recommendations'])
-                message += f"🎯 *Recommendations:* {recommendations}\n\n"
+                if health_category == 'junk':
+                    message += f"🚨 *URGENT - YOUR HEALTH DEPENDS ON THIS:* {recommendations}\n\n"
+                elif health_category == 'healthy':
+                    message += f"✨ *Keep It Up:* {recommendations}\n\n"
+                else:
+                    message += f"🎯 *Suggestions:* {recommendations}\n\n"
 
-            # Fun fact
+            # Fun fact with enhanced presentation
             if analysis.get('fun_fact'):
                 fun_fact = escape_markdown(analysis['fun_fact'])
-                message += f"🤓 *Fun Fact:* {fun_fact}\n\n"
+                message += f"🤓 *Did You Know?* {fun_fact}\n\n"
 
-            # Additional notes
+            # Additional notes with enhanced formatting
             if analysis.get('notes'):
                 notes = escape_markdown(analysis['notes'])
-                message += f"📝 *Notes:* {notes}\n\n"
+                message += f"📝 *Additional Notes:* {notes}\n\n"
 
-            message += "Would you like to log this meal? 📝"
+            # Enhanced call-to-action with visual separator
+            message += "─" * 25 + "\n"
+            message += "📝 *Ready to log this meal?*"
 
             return message
 
         except Exception as e:
             logger.error(f"Error formatting enhanced analysis for user: {e}")
-            return f"🍽️ Meal analyzed: {analysis.get('total_calories', 0):.0f} calories\nWould you like to log this meal?"
+            # Enhanced fallback message
+            return (f"🍽️ *Meal Analysis Complete*\n\n"
+                   f"🔥 Calories: {analysis.get('total_calories', 0):.0f}\n"
+                   f"📊 Confidence: {analysis.get('confidence', 70):.0f}%\n\n"
+                   f"─────────────────────────\n"
+                   f"📝 *Ready to log this meal?*")

@@ -1,6 +1,8 @@
 import logging
 import os
 import tempfile
+import asyncio
+import random
 from datetime import datetime, date, timedelta
 from telegram import Update, Message
 from telegram.ext import ContextTypes
@@ -21,7 +23,26 @@ logger = logging.getLogger(__name__)
 
 class BotHandlers:
     """Message and callback handlers for the MealMetrics bot"""
-    
+
+    # Dynamic food examples for tip messages
+    FOOD_EXAMPLES = [
+        "200g grilled chicken with rice",
+        "Large pepperoni pizza slice",
+        "Medium coffee with milk",
+        "Fresh fruit salad bowl",
+        "500ml mango juice without sugar",
+        "Homemade pasta with tomato sauce",
+        "Greek yogurt with honey and nuts",
+        "Grilled salmon with vegetables",
+        "Chocolate chip cookie (2 pieces)",
+        "Green smoothie with spinach and banana",
+        "Caesar salad with chicken",
+        "Beef burger with fries",
+        "Sushi roll (8 pieces)",
+        "Oatmeal with berries and almonds",
+        "Cheese sandwich on whole wheat"
+    ]
+
     def __init__(self, db_manager):
         """Initialize handlers with database manager"""
         self.db = db_manager
@@ -141,15 +162,27 @@ class BotHandlers:
         # Get caption if provided
         caption = update.message.caption if update.message.caption else None
 
-        # Send processing message with caption acknowledgment
+        # Send processing message with caption acknowledgment or tip
         if caption:
+            # User provided caption - analyze directly
             processing_msg = await update.message.reply_text(
                 f"🔍 Analyzing your meal with details: *{caption}*\n\nThis may take a moment...",
                 parse_mode=ParseMode.MARKDOWN
             )
         else:
-            processing_msg = await update.message.reply_text(
-                "🔍 Analyzing your meal... This may take a moment.\n\n💡 *Tip: Add a caption with details like '500ml mango juice without sugar' for more accurate results!*",
+            # No caption - show tip with dynamic example for 3 seconds
+            random_example = random.choice(self.FOOD_EXAMPLES)
+            tip_msg = await update.message.reply_text(
+                f"🔍 Analyzing your meal...\n\n💡 *Tip: Add a caption with details like '{random_example}' for more accurate results!*",
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+            # Wait for 3 seconds
+            await asyncio.sleep(3)
+
+            # Update message to show analysis in progress
+            processing_msg = await tip_msg.edit_text(
+                "🔍 Analyzing your meal... This may take a moment.\n\n💡 *Getting detailed nutritional breakdown...*",
                 parse_mode=ParseMode.MARKDOWN
             )
         
