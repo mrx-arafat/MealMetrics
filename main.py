@@ -17,9 +17,6 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from utils.config import Config
 from database.factory import create_database_manager
-from database.operations import MealOperations
-from database.mysql_operations import MySQLMealOperations
-from database.mysql_manager import MySQLDatabaseManager
 from bot.handlers import BotHandlers
 
 # Configure logging
@@ -94,15 +91,35 @@ class MealMetricsBot:
         app.add_error_handler(self._error_handler)
     
     async def _error_handler(self, update: Update, context):
-        """Handle errors"""
-        logger.error(f"Exception while handling an update: {context.error}")
-        
+        """Enhanced error handler with detailed logging and user feedback"""
+        error = context.error
+        logger.error(f"Exception while handling an update: {error}", exc_info=True)
+
+        # Log additional context for debugging
+        if update:
+            logger.error(f"Update that caused error: {update}")
+            if update.effective_user:
+                logger.error(f"User: {update.effective_user.id} (@{update.effective_user.username})")
+
+        # Determine appropriate error message based on error type
+        if "timeout" in str(error).lower():
+            error_message = "⏱️ Request timed out. Please try again in a moment."
+        elif "network" in str(error).lower() or "connection" in str(error).lower():
+            error_message = "🌐 Network issue detected. Please check your connection and try again."
+        elif "json" in str(error).lower():
+            error_message = "🤖 AI response formatting issue. Please try again with a different photo."
+        elif "rate limit" in str(error).lower():
+            error_message = "⏳ Too many requests. Please wait a moment before trying again."
+        else:
+            error_message = "❌ Something went wrong. Please try again or use /help for assistance."
+
         # Try to send error message to user if possible
         if update and update.effective_chat:
             try:
                 await context.bot.send_message(
                     chat_id=update.effective_chat.id,
-                    text="❌ Sorry, something went wrong. Please try again or use /help for assistance."
+                    text=error_message,
+                    parse_mode=None  # Use plain text for error messages to avoid formatting issues
                 )
             except Exception as e:
                 logger.error(f"Failed to send error message to user: {e}")
@@ -131,7 +148,7 @@ class MealMetricsBot:
             # Create a future that will be set when we receive a stop signal
             stop_event = asyncio.Event()
 
-            def signal_handler(signum, frame):
+            def signal_handler(_signum, _frame):
                 # Signal handler for graceful shutdown
                 stop_event.set()
 

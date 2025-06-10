@@ -3,8 +3,13 @@
 Test script to verify MealMetrics bot improvements
 """
 
+import sys
+import os
 import random
-import asyncio
+
+# Add the parent directory to Python path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from bot.handlers import BotHandlers
 
 def test_dynamic_examples():
@@ -148,7 +153,7 @@ def test_message_formatting():
 
         # Check for key elements in junk food message
         assert "☠️" in junk_message, "Missing skull emoji for junk food"
-        assert "�" in junk_message, "Missing warning emoji"
+        assert "⚠️" in junk_message, "Missing warning emoji"
         assert "💀" in junk_message, "Missing reality check emoji"
         assert "REALITY CHECK" in junk_message, "Missing reality check text"
         assert "WARNING" in junk_message, "Missing warning text"

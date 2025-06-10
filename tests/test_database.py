@@ -5,7 +5,9 @@ Test database connection for MealMetrics bot (SQLite or MySQL)
 
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# Add the parent directory to Python path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.config import Config
 from database.factory import create_database_manager

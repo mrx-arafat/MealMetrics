@@ -1,7 +1,9 @@
 import base64
 import io
+import re
 from PIL import Image
 from datetime import datetime, date
+from typing import List, Dict, Any, Optional, Union
 import logging
 
 logger = logging.getLogger(__name__)
@@ -55,21 +57,89 @@ def validate_image_format(filename: str, supported_formats: list) -> bool:
     extension = filename.lower().split('.')[-1]
     return extension in [fmt.lower() for fmt in supported_formats]
 
-def format_meal_summary(meals: list) -> str:
+def format_meal_summary(meals: List[Dict[str, Any]]) -> str:
     """Format a list of meals into a summary string"""
     if not meals:
-        return "No meals logged today."
-    
+        return "📊 **Today's Summary**\n\n🍽️ No meals logged today.\n\nSend me a photo of your meal to get started!"
+
     total_calories = sum(meal['calories'] for meal in meals)
     meal_count = len(meals)
-    
-    summary = f"📊 Today's Summary:\n"
-    summary += f"🍽️ Meals logged: {meal_count}\n"
-    summary += f"🔥 Total calories: {format_calories(total_calories)}\n\n"
-    
-    summary += "Recent meals:\n"
-    for i, meal in enumerate(meals[-5:], 1):  # Show last 5 meals
-        time_str = datetime.fromisoformat(meal['timestamp']).strftime("%H:%M")
-        summary += f"{i}. {meal['description']} - {format_calories(meal['calories'])} ({time_str})\n"
-    
+
+    summary = f"📊 **Today's Summary**\n\n"
+    summary += f"🍽️ **Meals logged:** {meal_count}\n"
+    summary += f"🔥 **Total calories:** {format_calories(total_calories)}\n\n"
+
+    if meal_count > 0:
+        summary += "**Recent meals:**\n"
+        for i, meal in enumerate(meals[-5:], 1):  # Show last 5 meals
+            try:
+                time_str = datetime.fromisoformat(meal['timestamp']).strftime("%H:%M")
+                description = escape_markdown_v2(meal['description'][:50] + "..." if len(meal['description']) > 50 else meal['description'])
+                summary += f"{i}\\. {description} \\- {format_calories(meal['calories'])} \\({time_str}\\)\n"
+            except Exception as e:
+                logger.warning(f"Error formatting meal {i}: {e}")
+                continue
+
     return summary
+
+def escape_markdown_v2(text: str) -> str:
+    """Escape special characters for Telegram MarkdownV2"""
+    if not text:
+        return ""
+
+    # Characters that need to be escaped in MarkdownV2
+    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+
+    for char in special_chars:
+        text = text.replace(char, f'\\{char}')
+
+    return text
+
+def sanitize_input(text: str, max_length: int = 1000) -> str:
+    """Sanitize user input text"""
+    if not text:
+        return ""
+
+    # Remove excessive whitespace
+    text = re.sub(r'\s+', ' ', text.strip())
+
+    # Limit length
+    if len(text) > max_length:
+        text = text[:max_length] + "..."
+
+    return text
+
+def parse_numeric_value(value: Union[str, int, float], default: float = 0.0) -> float:
+    """Parse numeric values that might contain text like '100 calories' or '85%'"""
+    if isinstance(value, (int, float)):
+        return float(value)
+
+    if isinstance(value, str):
+        # Extract first number from string (handles "100 calories", "85%", etc.)
+        numbers = re.findall(r'\d+\.?\d*', str(value))
+        if numbers:
+            return float(numbers[0])
+        else:
+            logger.warning(f"Could not parse numeric value from '{value}', using default {default}")
+            return default
+
+    return default
+
+def validate_user_input(text: str, min_length: int = 1, max_length: int = 1000) -> bool:
+    """Validate user input text"""
+    if not text or not isinstance(text, str):
+        return False
+
+    text = text.strip()
+    return min_length <= len(text) <= max_length
+
+def format_confidence(confidence: float) -> str:
+    """Format confidence percentage for display"""
+    if confidence >= 90:
+        return f"🟢 {confidence:.0f}% (Very High)"
+    elif confidence >= 75:
+        return f"🟡 {confidence:.0f}% (High)"
+    elif confidence >= 60:
+        return f"🟠 {confidence:.0f}% (Medium)"
+    else:
+        return f"🔴 {confidence:.0f}% (Low)"

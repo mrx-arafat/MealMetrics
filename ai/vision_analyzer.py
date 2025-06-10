@@ -1,10 +1,11 @@
 import json
 import logging
 import requests
+import time
 from PIL import Image
 from typing import Dict, Any, Optional, Tuple
 from utils.config import Config
-from utils.helpers import pil_image_to_base64, resize_image_if_needed
+from utils.helpers import pil_image_to_base64, resize_image_if_needed, parse_numeric_value, escape_markdown_v2
 from .prompts import CALORIE_ANALYSIS_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -160,9 +161,33 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
                 if 'total_fat' not in analysis_result:
                     analysis_result['total_fat'] = 0
                 
-                # Ensure numeric fields are properly typed
-                analysis_result['total_calories'] = float(analysis_result['total_calories'])
-                analysis_result['confidence'] = float(analysis_result['confidence'])
+                # Ensure numeric fields are properly typed with robust parsing
+                analysis_result['total_calories'] = parse_numeric_value(analysis_result['total_calories'], 0.0)
+                analysis_result['confidence'] = parse_numeric_value(analysis_result['confidence'], 70.0)
+
+                # Parse numeric fields in food_items if they exist
+                if 'food_items' in analysis_result and analysis_result['food_items']:
+                    for item in analysis_result['food_items']:
+                        if 'calories' in item:
+                            item['calories'] = parse_numeric_value(item.get('calories', 0), 0.0)
+                        if 'carbs' in item:
+                            item['carbs'] = parse_numeric_value(item.get('carbs', 0), 0.0)
+                        if 'protein' in item:
+                            item['protein'] = parse_numeric_value(item.get('protein', 0), 0.0)
+                        if 'fat' in item:
+                            item['fat'] = parse_numeric_value(item.get('fat', 0), 0.0)
+                        if 'health_score' in item:
+                            item['health_score'] = parse_numeric_value(item.get('health_score', 5), 5.0)
+
+                # Parse total macronutrients
+                if 'total_carbs' in analysis_result:
+                    analysis_result['total_carbs'] = parse_numeric_value(analysis_result.get('total_carbs', 0), 0.0)
+                if 'total_protein' in analysis_result:
+                    analysis_result['total_protein'] = parse_numeric_value(analysis_result.get('total_protein', 0), 0.0)
+                if 'total_fat' in analysis_result:
+                    analysis_result['total_fat'] = parse_numeric_value(analysis_result.get('total_fat', 0), 0.0)
+                if 'health_score' in analysis_result:
+                    analysis_result['health_score'] = parse_numeric_value(analysis_result.get('health_score', 5), 5.0)
                 
                 # Validate ranges
                 if analysis_result['confidence'] < 0 or analysis_result['confidence'] > 100:
@@ -347,10 +372,10 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
                 fun_fact = escape_markdown(analysis['fun_fact'])
                 message += f"🤓 *Did You Know?* {fun_fact}\n\n"
 
-            # Additional notes with enhanced formatting
-            if analysis.get('notes'):
-                notes = escape_markdown(analysis['notes'])
-                message += f"📝 *Additional Notes:* {notes}\n\n"
+            # Additional notes with enhanced formatting (commented out for now)
+            # if analysis.get('notes'):
+            #     notes = escape_markdown(analysis['notes'])
+            #     message += f"📝 *Additional Notes:* {notes}\n\n"
 
             # Enhanced call-to-action with visual separator
             message += "─" * 25 + "\n"

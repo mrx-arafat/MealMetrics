@@ -46,6 +46,8 @@ If you detect junk food, fast food, or unhealthy choices, provide DARK, IMPACTFU
 - Include shocking statistics about processed food effects
 - Connect immediate pleasure to long-term pain
 
+IMPORTANT: All numeric fields (calories, carbs, protein, fat, confidence, health_score) must be pure numbers without units or text (e.g., use 250 not "250 calories" or "250g").
+
 Format your response as valid JSON only:
 {
     "description": "Detailed description of the complete meal",
@@ -53,21 +55,21 @@ Format your response as valid JSON only:
         {
             "name": "specific food item name",
             "portion": "precise portion size with measurements",
-            "calories": estimated_calories_number,
-            "carbs": carbs_in_grams,
-            "protein": protein_in_grams,
-            "fat": fat_in_grams,
+            "calories": 250,
+            "carbs": 30,
+            "protein": 25,
+            "fat": 10,
             "cooking_method": "preparation method",
-            "health_score": health_rating_1_to_10
+            "health_score": 7
         }
     ],
-    "total_calories": total_estimated_calories_number,
-    "total_carbs": total_carbs_in_grams,
-    "total_protein": total_protein_in_grams,
-    "total_fat": total_fat_in_grams,
-    "confidence": confidence_percentage_number,
+    "total_calories": 450,
+    "total_carbs": 45,
+    "total_protein": 35,
+    "total_fat": 15,
+    "confidence": 85,
     "health_category": "healthy/moderate/junk",
-    "health_score": overall_health_score_1_to_10,
+    "health_score": 8,
     "witty_comment": "For junk food: Dark reality check about health consequences, addiction, and long-term damage. For healthy food: Positive reinforcement. For moderate: Balanced perspective.",
     "recommendations": "For junk food: Stark warnings about health risks and specific healthier alternatives. For healthy food: Ways to maintain good habits. For moderate: Improvement suggestions.",
     "fun_fact": "Interesting nutritional or food fact related to this meal",
