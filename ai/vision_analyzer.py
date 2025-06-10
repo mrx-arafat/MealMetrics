@@ -394,7 +394,8 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
             if total_calories > 0:
                 calorie_range = self._get_calorie_range(total_calories)
                 food_description = analysis.get('description', 'this meal')
-                message += f"*NB:* {calorie_range} \\(This is an estimate based on a typical serving size of {escape_markdown(food_description)}, which may vary depending on preparation method and portion size\\)\n\n"
+                # Don't escape the parentheses in NB note as they don't need escaping in this context
+                message += f"*NB:* {calorie_range} (This is an estimate based on a typical serving size of {escape_markdown(food_description)}, which may vary depending on preparation method and portion size)\n\n"
 
             # Enhanced call-to-action with visual separator
             message += "─" * 25 + "\n"
