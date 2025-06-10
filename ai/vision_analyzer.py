@@ -2,6 +2,7 @@ import json
 import logging
 import requests
 import time
+import hashlib
 from PIL import Image
 from typing import Dict, Any, Optional, Tuple
 from utils.config import Config
@@ -12,11 +13,24 @@ logger = logging.getLogger(__name__)
 
 class VisionAnalyzer:
     """AI-powered food image analysis for calorie estimation"""
-    
+
     def __init__(self):
         self.api_key = Config.OPENROUTER_API_KEY
         self.model = Config.OPENROUTER_MODEL
         self.base_url = Config.OPENROUTER_BASE_URL
+        # Cache for consistent results on identical images
+        self._analysis_cache = {}
+
+    def _get_image_hash(self, image: Image.Image) -> str:
+        """Generate a hash for the image to detect identical images"""
+        # Convert image to bytes and hash it
+        import io
+        img_byte_arr = io.BytesIO()
+        # Resize to standard size for consistent hashing
+        standardized_image = image.resize((256, 256))
+        standardized_image.save(img_byte_arr, format='JPEG', quality=85)
+        img_byte_arr = img_byte_arr.getvalue()
+        return hashlib.md5(img_byte_arr).hexdigest()
         
     def analyze_food_image(self, image: Image.Image, caption: Optional[str] = None) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """
@@ -32,6 +46,15 @@ class VisionAnalyzer:
         try:
             # Resize image if needed to reduce API costs and improve processing
             processed_image = resize_image_if_needed(image, max_size=(1024, 1024))
+
+            # Generate cache key based on image hash and caption
+            image_hash = self._get_image_hash(processed_image)
+            cache_key = f"{image_hash}_{caption or 'no_caption'}"
+
+            # Check cache for identical image analysis
+            if cache_key in self._analysis_cache:
+                logger.info(f"Using cached analysis for image hash: {image_hash[:8]}...")
+                return self._analysis_cache[cache_key], None
             
             # Convert image to base64
             image_base64 = pil_image_to_base64(processed_image, format="JPEG")
@@ -87,7 +110,9 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
                     }
                 ],
                 "max_tokens": 1500,  # Increased for more detailed analysis
-                "temperature": 0.2   # Even lower temperature for more consistent results with context
+                "temperature": 0.0,  # Zero temperature for maximum consistency
+                "seed": 42,          # Fixed seed for reproducible results
+                "top_p": 0.1         # Very low top_p for more deterministic output
             }
             
             # Make API request
@@ -196,9 +221,18 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
                 if analysis_result['total_calories'] < 0:
                     analysis_result['total_calories'] = 0
                 
+                # Cache the result for consistency
+                self._analysis_cache[cache_key] = analysis_result
+
+                # Limit cache size to prevent memory issues
+                if len(self._analysis_cache) > 100:
+                    # Remove oldest entries (simple FIFO)
+                    oldest_key = next(iter(self._analysis_cache))
+                    del self._analysis_cache[oldest_key]
+
                 logger.info(f"Successfully analyzed food image: {analysis_result['description']} "
                            f"({analysis_result['total_calories']} cal, {analysis_result['confidence']}% confidence)")
-                
+
                 return analysis_result, None
                 
             except json.JSONDecodeError as e:
