@@ -59,6 +59,7 @@ def run_all_tests():
         ("test_comprehensive.py", "Comprehensive Test Suite"),
         ("test_database.py", "Database Connection Tests"),
         ("test_improvements.py", "Bot Improvements Tests"),
+        ("test_nb_note.py", "NB Note and Contextualization Tests"),
         ("test_mysql_connection.py", "MySQL Connection Tests"),
     ]
     
@@ -100,8 +101,9 @@ def run_specific_test(test_name):
     # Map test names to files
     test_map = {
         "comprehensive": "test_comprehensive.py",
-        "database": "test_database.py", 
+        "database": "test_database.py",
         "improvements": "test_improvements.py",
+        "nb": "test_nb_note.py",
         "mysql": "test_mysql_connection.py",
     }
     

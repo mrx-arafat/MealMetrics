@@ -347,25 +347,37 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
                     message += f" • {health_indicator}\n"
                 message += "\n"
 
-            # Enhanced witty comment section with darker reality checks for junk food
+            # Enhanced witty comment section with proper contextualization
             if analysis.get('witty_comment'):
                 witty_comment = escape_markdown(analysis['witty_comment'])
-                if health_category == 'junk':
-                    message += f"💀 *REALITY CHECK:* {witty_comment}\n\n"
-                elif health_category == 'healthy':
-                    message += f"🌟 *Great Choice!* {witty_comment}\n\n"
-                else:
-                    message += f"💡 *Nutritional Insight:* {witty_comment}\n\n"
+                # Only show if it's not the generic template text
+                if not any(template in witty_comment for template in [
+                    "For junk food: Dark reality check",
+                    "For healthy food: Positive reinforcement",
+                    "For moderate: Balanced perspective"
+                ]):
+                    if health_category == 'junk':
+                        message += f"💀 *REALITY CHECK:* {witty_comment}\n\n"
+                    elif health_category == 'healthy':
+                        message += f"🌟 *Great Choice!* {witty_comment}\n\n"
+                    else:
+                        message += f"💡 *Nutritional Insight:* {witty_comment}\n\n"
 
-            # Enhanced recommendations with urgent warnings for junk food
+            # Enhanced recommendations with proper contextualization
             if analysis.get('recommendations'):
                 recommendations = escape_markdown(analysis['recommendations'])
-                if health_category == 'junk':
-                    message += f"🚨 *URGENT - YOUR HEALTH DEPENDS ON THIS:* {recommendations}\n\n"
-                elif health_category == 'healthy':
-                    message += f"✨ *Keep It Up:* {recommendations}\n\n"
-                else:
-                    message += f"🎯 *Suggestions:* {recommendations}\n\n"
+                # Only show if it's not the generic template text
+                if not any(template in recommendations for template in [
+                    "For junk food: Stark warnings",
+                    "For healthy food: Ways to maintain",
+                    "For moderate: Improvement suggestions"
+                ]):
+                    if health_category == 'junk':
+                        message += f"🚨 *URGENT - YOUR HEALTH DEPENDS ON THIS:* {recommendations}\n\n"
+                    elif health_category == 'healthy':
+                        message += f"✨ *Keep It Up:* {recommendations}\n\n"
+                    else:
+                        message += f"🎯 *Suggestions:* {recommendations}\n\n"
 
             # Fun fact with enhanced presentation
             if analysis.get('fun_fact'):
@@ -376,6 +388,13 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
             # if analysis.get('notes'):
             #     notes = escape_markdown(analysis['notes'])
             #     message += f"📝 *Additional Notes:* {notes}\n\n"
+
+            # Add calorie estimation note
+            total_calories = analysis.get('total_calories', 0)
+            if total_calories > 0:
+                calorie_range = self._get_calorie_range(total_calories)
+                food_description = analysis.get('description', 'this meal')
+                message += f"*NB:* {calorie_range} \\(This is an estimate based on a typical serving size of {escape_markdown(food_description)}, which may vary depending on preparation method and portion size\\)\n\n"
 
             # Enhanced call-to-action with visual separator
             message += "─" * 25 + "\n"
@@ -391,3 +410,15 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
                    f"📊 Confidence: {analysis.get('confidence', 70):.0f}%\n\n"
                    f"─────────────────────────\n"
                    f"📝 *Ready to log this meal?*")
+
+    def _get_calorie_range(self, calories: float) -> str:
+        """Generate a calorie range for the NB note"""
+        # Create a range of ±50 calories around the estimate
+        lower = max(0, int(calories - 50))
+        upper = int(calories + 50)
+
+        # Round to nearest 25 for cleaner ranges
+        lower = (lower // 25) * 25
+        upper = ((upper + 24) // 25) * 25
+
+        return f"{lower}-{upper} kcal"

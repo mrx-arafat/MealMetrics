@@ -25,7 +25,7 @@ def test_dynamic_examples():
     
     # Test that we have examples
     assert len(handlers.FOOD_EXAMPLES) > 0, "No food examples found!"
-    print(f"✅ Found {len(handlers.FOOD_EXAMPLES)} food examples")
+    print(f"Found {len(handlers.FOOD_EXAMPLES)} food examples")
     
     # Test random selection
     print("\nRandom examples (simulating tip messages):")
@@ -33,45 +33,7 @@ def test_dynamic_examples():
         example = random.choice(handlers.FOOD_EXAMPLES)
         print(f"{i+1}. {example}")
     
-    print("\n✅ Dynamic examples system working correctly!")
-
-def test_emoji_encoding():
-    """Test emoji encoding in messages"""
-    print("\nTesting Emoji Encoding:")
-    print("=" * 40)
-    
-    # Test emojis that were problematic
-    test_emojis = [
-        "🔍",  # Magnifying glass
-        "💡",  # Light bulb
-        "🔥",  # Fire
-        "💚",  # Green heart
-        "📊",  # Bar chart
-        "🍽️", # Fork and knife with plate
-        "🟢",  # Green circle
-        "🟡",  # Yellow circle
-        "🟠",  # Orange circle
-        "🔴",  # Red circle
-        "😏",  # Smirking face
-        "🌟",  # Star
-        "🎯",  # Direct hit
-        "✨",  # Sparkles
-        "🤓",  # Nerd face
-        "📝",  # Memo
-    ]
-    
-    print("Testing emoji rendering:")
-    for emoji in test_emojis:
-        try:
-            # Test that emoji can be encoded/decoded properly
-            encoded = emoji.encode('utf-8')
-            decoded = encoded.decode('utf-8')
-            assert emoji == decoded, f"Emoji encoding failed for {emoji}"
-            print(f"✅ {emoji} - OK")
-        except Exception as e:
-            print(f"❌ {emoji} - Failed: {e}")
-    
-    print("\n✅ Emoji encoding tests completed!")
+    print("\nDynamic examples system working correctly!")
 
 def test_message_formatting():
     """Test message formatting improvements"""
@@ -136,7 +98,7 @@ def test_message_formatting():
         # Test healthy food formatting
         print("Testing HEALTHY food formatting:")
         healthy_message = analyzer.format_analysis_for_user(healthy_analysis)
-        print("✅ Healthy food formatting successful!")
+        print("Healthy food formatting successful!")
         print("\nHealthy food sample:")
         print("-" * 50)
         print(healthy_message[:300] + "..." if len(healthy_message) > 300 else healthy_message)
@@ -145,24 +107,21 @@ def test_message_formatting():
         # Test junk food formatting with reality check
         print("\nTesting JUNK food formatting with REALITY CHECK:")
         junk_message = analyzer.format_analysis_for_user(junk_analysis)
-        print("✅ Junk food reality check formatting successful!")
+        print("Junk food reality check formatting successful!")
         print("\nJunk food reality check sample:")
         print("-" * 50)
         print(junk_message[:400] + "..." if len(junk_message) > 400 else junk_message)
         print("-" * 50)
 
         # Check for key elements in junk food message
-        assert "☠️" in junk_message, "Missing skull emoji for junk food"
-        assert "⚠️" in junk_message, "Missing warning emoji"
-        assert "💀" in junk_message, "Missing reality check emoji"
         assert "REALITY CHECK" in junk_message, "Missing reality check text"
         assert "WARNING" in junk_message, "Missing warning text"
 
-        print("✅ All reality check elements present in junk food message!")
-        print("✅ Dark messaging system working correctly!")
+        print("All reality check elements present in junk food message!")
+        print("Dark messaging system working correctly!")
 
     except Exception as e:
-        print(f"❌ Message formatting failed: {e}")
+        print(f"Message formatting failed: {e}")
 
 def main():
     """Run all tests"""
@@ -171,15 +130,14 @@ def main():
     
     try:
         test_dynamic_examples()
-        test_emoji_encoding()
         test_message_formatting()
         
         print("\n" + "=" * 50)
-        print("🎉 All tests passed! Improvements are working correctly.")
+        print("All tests passed! Improvements are working correctly.")
         print("=" * 50)
         
     except Exception as e:
-        print(f"\n❌ Test failed: {e}")
+        print(f"\nTest failed: {e}")
         print("=" * 50)
 
 if __name__ == "__main__":

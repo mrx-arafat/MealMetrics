@@ -70,8 +70,8 @@ Format your response as valid JSON only:
     "confidence": 85,
     "health_category": "healthy/moderate/junk",
     "health_score": 8,
-    "witty_comment": "For junk food: Dark reality check about health consequences, addiction, and long-term damage. For healthy food: Positive reinforcement. For moderate: Balanced perspective.",
-    "recommendations": "For junk food: Stark warnings about health risks and specific healthier alternatives. For healthy food: Ways to maintain good habits. For moderate: Improvement suggestions.",
+    "witty_comment": "Write a specific, personalized comment about THIS meal. For junk food: Dark reality check about health consequences. For healthy food: Positive reinforcement. For moderate: Balanced perspective.",
+    "recommendations": "Write specific, actionable advice for THIS meal. For junk food: Stark warnings and healthier alternatives. For healthy food: Ways to maintain habits. For moderate: Improvement suggestions.",
     "fun_fact": "Interesting nutritional or food fact related to this meal",
     "notes": "Additional observations, assumptions, or analysis details",
     "user_input_acknowledged": "Brief confirmation of what user told you (if caption provided, otherwise null)"
@@ -83,6 +83,7 @@ IMPORTANT GUIDELINES:
 - Be extremely detailed in food identification (but respect user's description first)
 - Account for hidden ingredients (oils, seasonings, etc.)
 - Provide realistic portion estimates using visual references
+- 🚨 CRITICAL: DO NOT use template phrases like "For junk food:" or "For healthy food:" in witty_comment or recommendations fields. Write SPECIFIC content about the actual meal being analyzed.
 - For JUNK FOOD: Be brutally honest about consequences - mention diabetes risk, heart disease, obesity, premature aging, energy crashes, mood swings, addiction cycles
 - For JUNK FOOD: Use shocking comparisons like "This meal = 2 hours of intense cardio to burn off" or "Equivalent to eating 15 sugar cubes"
 - For JUNK FOOD: Mention how food companies engineer addiction and exploit dopamine pathways
