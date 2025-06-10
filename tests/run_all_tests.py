@@ -61,6 +61,7 @@ def run_all_tests():
         ("test_improvements.py", "Bot Improvements Tests"),
         ("test_nb_note.py", "NB Note and Contextualization Tests"),
         ("test_consistency.py", "Consistency Improvement Tests"),
+        ("test_description_format.py", "Description Format Tests"),
         ("test_mysql_connection.py", "MySQL Connection Tests"),
     ]
     
@@ -106,6 +107,7 @@ def run_specific_test(test_name):
         "improvements": "test_improvements.py",
         "nb": "test_nb_note.py",
         "consistency": "test_consistency.py",
+        "format": "test_description_format.py",
         "mysql": "test_mysql_connection.py",
     }
     

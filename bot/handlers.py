@@ -128,10 +128,15 @@ class BotHandlers:
         """Handle /today command"""
         user_id = update.effective_user.id
         self.db.update_user_activity(user_id)
-        
+
+        # Get user's timezone offset from Telegram (if available)
+        user_timezone_offset = None
+        if hasattr(update.effective_user, 'timezone_offset'):
+            user_timezone_offset = update.effective_user.timezone_offset
+
         meals_today = self.meal_ops.get_user_meals_today(user_id)
-        summary = format_meal_summary(meals_today)
-        
+        summary = format_meal_summary(meals_today, user_timezone_offset)
+
         await update.message.reply_text(
             summary,
             reply_markup=self.keyboards.back_to_menu(),
@@ -449,8 +454,14 @@ class BotHandlers:
     async def _handle_today_summary(self, query):
         """Handle today's summary display"""
         user_id = query.from_user.id
+
+        # Get user's timezone offset from Telegram (if available)
+        user_timezone_offset = None
+        if hasattr(query.from_user, 'timezone_offset'):
+            user_timezone_offset = query.from_user.timezone_offset
+
         meals_today = self.meal_ops.get_user_meals_today(user_id)
-        summary = format_meal_summary(meals_today)
+        summary = format_meal_summary(meals_today, user_timezone_offset)
 
         await query.edit_message_text(
             summary,

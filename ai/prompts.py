@@ -26,6 +26,12 @@ ANALYSIS REQUIREMENTS:
 7. **Health Assessment**: Categorize as healthy, moderate, or junk food
 8. **Smart Recommendations**: Provide witty, helpful advice especially for unhealthy choices
 
+🚨 CRITICAL: DESCRIPTION FORMAT REQUIREMENTS:
+- Use simple, comma-separated food items: "Fried Chicken Curry, Fried Rice, Sliced Onions"
+- NO verbose phrases like "A meal consisting of..." or "This dish features..."
+- Focus on main food components only
+- Keep descriptions concise and clear for food diary entries
+
 DETAILED ANALYSIS FACTORS:
 - **Visual Cues**: Oil shine (indicates frying), char marks (grilling), golden color (baking), etc.
 - **Portion Accuracy**: Compare to standard serving sizes, use plate/utensil proportions
@@ -59,7 +65,7 @@ IMPORTANT: All numeric fields (calories, carbs, protein, fat, confidence, health
 
 Format your response as valid JSON only:
 {
-    "description": "Detailed description of the complete meal",
+    "description": "Fried Chicken Curry, Fried Rice, Sliced Onions",
     "food_items": [
         {
             "name": "specific food item name",
@@ -115,12 +121,26 @@ REALITY CHECK EXAMPLES FOR JUNK FOOD:
 MEAL_DESCRIPTION_PROMPT = """
 Based on the food analysis, create a concise, user-friendly description of this meal that would be suitable for a food diary entry.
 
-Keep it brief but descriptive, focusing on the main components. For example:
-- "Grilled chicken breast with steamed broccoli and rice"
-- "Large pepperoni pizza slice with side salad"
-- "Chocolate chip cookies (3 pieces)"
+DESCRIPTION FORMAT REQUIREMENTS:
+- Use simple, comma-separated food items
+- Focus on main components only
+- Avoid verbose phrases like "A meal consisting of..."
+- Keep it under 50 characters when possible
+- Use proper food names, not descriptions
 
-The description should be clear and help the user remember what they ate.
+GOOD EXAMPLES:
+- "Fried Chicken Curry, Fried Rice, Sliced Onions"
+- "Grilled Chicken Breast, Steamed Broccoli, Rice"
+- "Pepperoni Pizza Slice, Side Salad"
+- "Chocolate Chip Cookies (3 pieces)"
+- "Mango Juice (500ml)"
+
+BAD EXAMPLES:
+- "A meal consisting of a tray divided into three compartments..."
+- "A delicious combination of various food items including..."
+- "This nutritious meal features..."
+
+The description should be clear, concise, and help the user remember what they ate.
 """
 
 CONFIDENCE_EXPLANATION_PROMPT = """
