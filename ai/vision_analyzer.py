@@ -109,8 +109,8 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
                         ]
                     }
                 ],
-                "max_tokens": 1500,  # Increased for more detailed analysis
-                "temperature": 0.0,  # Zero temperature for maximum consistency
+                "max_tokens": 2500,  # Increased for more detailed analysis
+                "temperature": 0.1,  # Zero temperature for maximum consistency
                 "seed": 42,          # Fixed seed for reproducible results
                 "top_p": 0.1         # Very low top_p for more deterministic output
             }
@@ -228,7 +228,7 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
                         logger.error(error_msg)
                         return None, error_msg
 
-                # Set default values for new optional fields if missing
+                # Set default values for missing fields and enhance basic responses
                 if 'health_category' not in analysis_result:
                     analysis_result['health_category'] = 'moderate'
                 if 'health_score' not in analysis_result:
@@ -245,6 +245,78 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
                     analysis_result['total_protein'] = 0
                 if 'total_fat' not in analysis_result:
                     analysis_result['total_fat'] = 0
+
+                # Enhance basic responses with estimated detailed breakdown
+                if 'food_items' not in analysis_result or not analysis_result['food_items']:
+                    # Create food items from description if missing
+                    description = analysis_result.get('description', 'Food item')
+                    total_calories = analysis_result.get('total_calories', 0)
+
+                    # Split description into food items
+                    food_names = [item.strip() for item in description.split(',')]
+                    if len(food_names) == 1 and ',' not in description:
+                        # Single item, use full calories
+                        food_items = [{
+                            "name": food_names[0],
+                            "portion": "estimated portion",
+                            "calories": total_calories,
+                            "carbs": total_calories * 0.5 / 4,  # Rough estimate: 50% carbs
+                            "protein": total_calories * 0.2 / 4,  # 20% protein
+                            "fat": total_calories * 0.3 / 9,     # 30% fat
+                            "cooking_method": "prepared",
+                            "health_score": analysis_result.get('health_score', 5)
+                        }]
+                    else:
+                        # Multiple items, distribute calories
+                        calories_per_item = total_calories / len(food_names) if food_names else total_calories
+                        food_items = []
+                        for name in food_names:
+                            food_items.append({
+                                "name": name,
+                                "portion": "estimated portion",
+                                "calories": calories_per_item,
+                                "carbs": calories_per_item * 0.5 / 4,
+                                "protein": calories_per_item * 0.2 / 4,
+                                "fat": calories_per_item * 0.3 / 9,
+                                "cooking_method": "prepared",
+                                "health_score": analysis_result.get('health_score', 5)
+                            })
+
+                    analysis_result['food_items'] = food_items
+                    logger.info("Enhanced basic response with estimated food breakdown")
+
+                # Add estimated macronutrients if missing
+                if analysis_result.get('total_carbs', 0) == 0 and analysis_result.get('total_calories', 0) > 0:
+                    total_cal = analysis_result['total_calories']
+                    analysis_result['total_carbs'] = total_cal * 0.5 / 4  # 50% carbs
+                    analysis_result['total_protein'] = total_cal * 0.2 / 4  # 20% protein
+                    analysis_result['total_fat'] = total_cal * 0.3 / 9     # 30% fat
+                    logger.info("Added estimated macronutrient breakdown")
+
+                # Add contextual content if missing
+                if not analysis_result.get('witty_comment'):
+                    calories = analysis_result.get('total_calories', 0)
+                    health_category = analysis_result.get('health_category', 'moderate')
+
+                    if health_category == 'junk' or calories > 800:
+                        analysis_result['witty_comment'] = "That's quite a calorie-dense choice! Your future self might have some words about this decision."
+                    elif health_category == 'healthy' or calories < 300:
+                        analysis_result['witty_comment'] = "Great choice! Your body will thank you for this nutritious fuel."
+                    else:
+                        analysis_result['witty_comment'] = "A balanced meal that fits well into a healthy eating pattern."
+
+                if not analysis_result.get('recommendations'):
+                    health_category = analysis_result.get('health_category', 'moderate')
+
+                    if health_category == 'junk':
+                        analysis_result['recommendations'] = "Consider balancing this with extra vegetables and water. Maybe plan a lighter next meal?"
+                    elif health_category == 'healthy':
+                        analysis_result['recommendations'] = "Keep up the great choices! This meal provides good nutrition and energy."
+                    else:
+                        analysis_result['recommendations'] = "Try adding more vegetables or lean protein to boost the nutritional value."
+
+                if not analysis_result.get('fun_fact'):
+                    analysis_result['fun_fact'] = "Did you know? It takes about 20 minutes for your brain to register that you're full, so eating slowly can help with portion control!"
                 
                 # Ensure numeric fields are properly typed with robust parsing
                 analysis_result['total_calories'] = parse_numeric_value(analysis_result['total_calories'], 0.0)
@@ -290,8 +362,16 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
                     oldest_key = next(iter(self._analysis_cache))
                     del self._analysis_cache[oldest_key]
 
+                # Debug logging to see what fields we actually got
+                available_fields = list(analysis_result.keys())
                 logger.info(f"Successfully analyzed food image: {analysis_result['description']} "
                            f"({analysis_result['total_calories']} cal, {analysis_result['confidence']}% confidence)")
+                logger.debug(f"Analysis result fields: {available_fields}")
+
+                # Check if we have detailed fields
+                has_detailed_fields = any(field in analysis_result for field in ['food_items', 'witty_comment', 'recommendations', 'total_carbs'])
+                if not has_detailed_fields:
+                    logger.warning("AI response missing detailed fields - may show basic format only")
 
                 return analysis_result, None
                 
@@ -430,15 +510,16 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
             message += f"🔥 *Calories:* {analysis['total_calories']:.0f}\n"
 
             # Enhanced health score display based on category
+            health_score_int = int(health_score)  # Convert to int for emoji multiplication
             if health_category == 'junk':
                 if health_score <= 3:
-                    health_display = f"💀 *Health Score:* {health_score}/10 {'💀' * min(health_score, 3)} - DANGER ZONE"
+                    health_display = f"💀 *Health Score:* {health_score}/10 {'💀' * min(health_score_int, 3)} - DANGER ZONE"
                 else:
-                    health_display = f"⚠️ *Health Score:* {health_score}/10 {'⚠️' * min(health_score, 3)} - PROCEED WITH CAUTION"
+                    health_display = f"⚠️ *Health Score:* {health_score}/10 {'⚠️' * min(health_score_int, 3)} - PROCEED WITH CAUTION"
             elif health_category == 'healthy':
-                health_display = f"💚 *Health Score:* {health_score}/10 {'⭐' * min(health_score, 5)} - EXCELLENT CHOICE"
+                health_display = f"💚 *Health Score:* {health_score}/10 {'⭐' * min(health_score_int, 5)} - EXCELLENT CHOICE"
             else:
-                health_display = f"💛 *Health Score:* {health_score}/10 {'⭐' * min(health_score, 5)}"
+                health_display = f"💛 *Health Score:* {health_score}/10 {'⭐' * min(health_score_int, 5)}"
 
             message += f"{health_display}\n"
             message += f"📊 *Confidence:* {analysis['confidence']:.0f}%\n\n"
@@ -475,7 +556,7 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
                         health_indicator = "🔴 Poor"
 
                     message += f"{i}. **{item_name}** ({portion})\n"
-                    message += f"   🔥 {calories} cal"
+                    message += f"   🔥 {calories:.0f} cal"
                     if cooking_method:
                         message += f" • 👨‍🍳 {cooking_method}"
                     message += f" • {health_indicator}\n"

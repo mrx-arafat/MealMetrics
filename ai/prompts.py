@@ -63,7 +63,10 @@ If you detect junk food, fast food, or unhealthy choices, provide DARK, IMPACTFU
 
 IMPORTANT: All numeric fields (calories, carbs, protein, fat, confidence, health_score) must be pure numbers without units or text (e.g., use 250 not "250 calories" or "250g").
 
-Format your response as valid JSON only:
+🚨 CRITICAL: YOU MUST INCLUDE ALL FIELDS BELOW - NO EXCEPTIONS! 🚨
+Missing any field will cause parsing errors and poor user experience.
+
+Format your response as valid JSON only with ALL required fields:
 {
     "description": "Fried Chicken Curry, Fried Rice, Sliced Onions",
     "food_items": [
