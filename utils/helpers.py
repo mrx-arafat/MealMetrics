@@ -145,6 +145,34 @@ def escape_markdown_v2(text: str) -> str:
 
     return text
 
+def escape_markdown_safe(text: str) -> str:
+    """Safely escape markdown characters with better error handling"""
+    if not text:
+        return ""
+
+    try:
+        # Convert to string if not already
+        text = str(text)
+
+        # Only escape the most problematic characters for basic markdown
+        # This is more conservative but safer than full MarkdownV2
+        escape_chars = {
+            '*': '\\*',
+            '_': '\\_',
+            '[': '\\[',
+            ']': '\\]',
+            '`': '\\`'
+        }
+
+        for char, escaped in escape_chars.items():
+            text = text.replace(char, escaped)
+
+        return text
+    except Exception as e:
+        logger.warning(f"Error escaping markdown: {e}, returning plain text")
+        # Return plain text without any markdown if escaping fails
+        return str(text).replace('*', '').replace('_', '').replace('[', '').replace(']', '').replace('`', '')
+
 def sanitize_input(text: str, max_length: int = 1000) -> str:
     """Sanitize user input text"""
     if not text:

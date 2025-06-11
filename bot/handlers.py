@@ -217,16 +217,47 @@ class BotHandlers:
                 os.unlink(temp_path)
                 
                 if error:
+                    # Provide more specific error messages based on error type
+                    if "timeout" in error.lower():
+                        error_message = (
+                            "⏱️ **Analysis Timeout**\n\n"
+                            "The AI service took too long to respond. This can happen during high traffic.\n\n"
+                            "**Please try again in a moment.**"
+                        )
+                    elif "network" in error.lower() or "connection" in error.lower():
+                        error_message = (
+                            "🌐 **Connection Issue**\n\n"
+                            "There's a temporary network issue connecting to the AI service.\n\n"
+                            "**Please check your connection and try again.**"
+                        )
+                    elif "json" in error.lower() or "parse" in error.lower():
+                        error_message = (
+                            "🤖 **AI Response Issue**\n\n"
+                            "The AI had trouble processing your image. This sometimes happens with complex photos.\n\n"
+                            "**Try taking a clearer photo with better lighting.**"
+                        )
+                    else:
+                        error_message = (
+                            "❌ **Analysis Failed**\n\n"
+                            "I couldn't analyze your meal due to a technical issue.\n\n"
+                            "**Please try again with a different photo.**"
+                        )
+
                     await processing_msg.edit_text(
-                        f"❌ Sorry, I couldn't analyze your meal: {error}\n\n"
-                        "Please try again with a clearer photo.",
+                        error_message,
                         parse_mode=ParseMode.MARKDOWN
                     )
                     return
-                
+
                 if not analysis_result:
                     await processing_msg.edit_text(
-                        "❌ Sorry, I couldn't analyze your meal. Please try again with a clearer photo.",
+                        "❌ **Analysis Failed**\n\n"
+                        "I couldn't identify any food in your photo.\n\n"
+                        "**Tips for better results:**\n"
+                        "• Take photos in good lighting\n"
+                        "• Make sure food is clearly visible\n"
+                        "• Avoid blurry or dark images\n"
+                        "• Include the entire meal in frame",
                         parse_mode=ParseMode.MARKDOWN
                     )
                     return
@@ -246,14 +277,35 @@ class BotHandlers:
                     )
                     return
                 
-                # Format and send analysis
-                analysis_text = self.vision_analyzer.format_analysis_for_user(analysis_result)
-                
-                await processing_msg.edit_text(
-                    analysis_text,
-                    reply_markup=self.keyboards.meal_confirmation(meal_id),
-                    parse_mode=ParseMode.MARKDOWN
-                )
+                # Format and send analysis with error handling
+                try:
+                    analysis_text = self.vision_analyzer.format_analysis_for_user(analysis_result)
+
+                    await processing_msg.edit_text(
+                        analysis_text,
+                        reply_markup=self.keyboards.meal_confirmation(meal_id),
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                except Exception as format_error:
+                    logger.warning(f"Markdown formatting failed, using plain text: {format_error}")
+
+                    # Fallback to plain text without markdown
+                    description = analysis_result.get('description', 'Food item')
+                    calories = analysis_result.get('total_calories', 0)
+                    confidence = analysis_result.get('confidence', 70)
+
+                    fallback_text = (
+                        f"🍽️ {description}\n\n"
+                        f"🔥 Calories: {calories:.0f}\n"
+                        f"📊 Confidence: {confidence:.0f}%\n\n"
+                        f"Ready to log this meal?"
+                    )
+
+                    await processing_msg.edit_text(
+                        fallback_text,
+                        reply_markup=self.keyboards.meal_confirmation(meal_id),
+                        parse_mode=None  # No markdown parsing
+                    )
                 
             except Exception as e:
                 # Clean up temp file on error
@@ -263,10 +315,38 @@ class BotHandlers:
                 
         except Exception as e:
             logger.error(f"Error processing photo for user {user_id}: {e}")
-            await processing_msg.edit_text(
-                "❌ Sorry, there was an error processing your photo. Please try again.",
-                parse_mode=ParseMode.MARKDOWN
-            )
+
+            # Provide helpful error message based on error type
+            if "Can't parse entities" in str(e):
+                error_message = (
+                    "🤖 **Processing Complete**\n\n"
+                    "I analyzed your meal but had trouble formatting the response.\n\n"
+                    "**Please try sending the photo again for a properly formatted result.**"
+                )
+            elif "timeout" in str(e).lower():
+                error_message = (
+                    "⏱️ **Request Timeout**\n\n"
+                    "The analysis took too long to complete.\n\n"
+                    "**Please try again in a moment.**"
+                )
+            else:
+                error_message = (
+                    "❌ **Processing Error**\n\n"
+                    "There was an unexpected error analyzing your photo.\n\n"
+                    "**Please try again with a different photo.**"
+                )
+
+            try:
+                await processing_msg.edit_text(
+                    error_message,
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            except Exception:
+                # Final fallback - plain text without any formatting
+                await processing_msg.edit_text(
+                    "Sorry, there was an error processing your photo. Please try again.",
+                    parse_mode=None
+                )
     
     async def handle_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle text messages"""

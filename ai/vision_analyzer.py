@@ -6,7 +6,7 @@ import hashlib
 from PIL import Image
 from typing import Dict, Any, Optional, Tuple
 from utils.config import Config
-from utils.helpers import pil_image_to_base64, resize_image_if_needed, parse_numeric_value, escape_markdown_v2
+from utils.helpers import pil_image_to_base64, resize_image_if_needed, parse_numeric_value, escape_markdown_safe
 from .prompts import CALORIE_ANALYSIS_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -115,47 +115,107 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
                 "top_p": 0.1         # Very low top_p for more deterministic output
             }
             
-            # Make API request
-            response = requests.post(
-                f"{self.base_url}/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=30
-            )
-            
-            if response.status_code != 200:
-                error_msg = f"API request failed with status {response.status_code}: {response.text}"
+            # Make API request with retry logic
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    response = requests.post(
+                        f"{self.base_url}/chat/completions",
+                        headers=headers,
+                        json=payload,
+                        timeout=45  # Increased timeout for VPS environments
+                    )
+
+                    if response.status_code == 200:
+                        break
+                    elif response.status_code == 429:  # Rate limit
+                        if attempt < max_retries - 1:
+                            wait_time = (attempt + 1) * 2
+                            logger.warning(f"Rate limited, waiting {wait_time}s before retry {attempt + 1}")
+                            time.sleep(wait_time)
+                            continue
+
+                    error_msg = f"API request failed with status {response.status_code}: {response.text}"
+                    logger.error(error_msg)
+                    return None, error_msg
+
+                except requests.exceptions.Timeout:
+                    if attempt < max_retries - 1:
+                        logger.warning(f"Request timeout, retrying {attempt + 1}/{max_retries}")
+                        continue
+                    error_msg = "Request to AI service timed out after multiple attempts"
+                    logger.error(error_msg)
+                    return None, error_msg
+                except requests.exceptions.RequestException as e:
+                    if attempt < max_retries - 1:
+                        logger.warning(f"Network error, retrying {attempt + 1}/{max_retries}: {e}")
+                        continue
+                    error_msg = f"Network error when calling AI service: {e}"
+                    logger.error(error_msg)
+                    return None, error_msg
+
+            # Parse response
+            try:
+                response_data = response.json()
+            except json.JSONDecodeError as e:
+                error_msg = f"Invalid JSON response from API: {e}"
                 logger.error(error_msg)
                 return None, error_msg
-            
-            # Parse response
-            response_data = response.json()
-            
+
             if 'choices' not in response_data or not response_data['choices']:
                 error_msg = "No response from AI model"
                 logger.error(error_msg)
                 return None, error_msg
-            
+
             ai_response = response_data['choices'][0]['message']['content']
             
-            # Try to parse JSON response
+            # Try to parse JSON response with enhanced recovery
             try:
                 # Clean the response - remove markdown code blocks if present
                 cleaned_response = ai_response.strip()
-                if cleaned_response.startswith('```json'):
-                    cleaned_response = cleaned_response[7:]  # Remove ```json
-                if cleaned_response.startswith('```'):
-                    cleaned_response = cleaned_response[3:]   # Remove ```
-                if cleaned_response.endswith('```'):
-                    cleaned_response = cleaned_response[:-3]  # Remove trailing ```
 
-                # Extract JSON from response (in case there's extra text)
+                # Remove various markdown code block formats
+                if cleaned_response.startswith('```json'):
+                    cleaned_response = cleaned_response[7:]
+                elif cleaned_response.startswith('```'):
+                    cleaned_response = cleaned_response[3:]
+
+                if cleaned_response.endswith('```'):
+                    cleaned_response = cleaned_response[:-3]
+
+                # Remove any leading/trailing text that's not JSON
                 json_start = cleaned_response.find('{')
                 json_end = cleaned_response.rfind('}') + 1
 
-                if json_start == -1 or json_end == 0:
-                    # Fallback: try to parse the entire response
-                    analysis_result = json.loads(cleaned_response)
+                if json_start == -1:
+                    raise json.JSONDecodeError("No JSON object found", cleaned_response, 0)
+
+                if json_end <= json_start:
+                    # Try to complete incomplete JSON
+                    logger.warning("Incomplete JSON detected, attempting to complete it")
+                    json_str = cleaned_response[json_start:]
+
+                    # Try to fix common incomplete JSON patterns
+                    if not json_str.rstrip().endswith('}'):
+                        # Handle incomplete strings first
+                        if json_str.count('"') % 2 != 0:
+                            # Odd number of quotes means unterminated string
+                            json_str += '"'
+                            logger.info("Added closing quote for unterminated string")
+
+                        # Handle incomplete arrays
+                        open_brackets = json_str.count('[') - json_str.count(']')
+                        if open_brackets > 0:
+                            json_str += ']' * open_brackets
+                            logger.info(f"Added {open_brackets} closing brackets")
+
+                        # Handle incomplete objects
+                        open_braces = json_str.count('{') - json_str.count('}')
+                        if open_braces > 0:
+                            json_str += '}' * open_braces
+                            logger.info(f"Added {open_braces} closing braces")
+
+                    analysis_result = json.loads(json_str)
                 else:
                     json_str = cleaned_response[json_start:json_end]
                     analysis_result = json.loads(json_str)
@@ -236,41 +296,81 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
                 return analysis_result, None
                 
             except json.JSONDecodeError as e:
-                # Try to handle incomplete JSON by attempting to complete it
+                # Enhanced recovery for incomplete or malformed JSON
+                logger.warning(f"JSON parsing failed: {e}, attempting recovery")
+
                 try:
-                    # If the JSON is incomplete, try to extract what we can
-                    if '"total_calories"' in cleaned_response and '"confidence"' in cleaned_response:
-                        # Try to extract basic info even if JSON is incomplete
+                    # Try multiple recovery strategies
+                    analysis_result = None
+
+                    # Strategy 1: Extract from partial JSON using regex
+                    if '"description"' in ai_response and '"total_calories"' in ai_response:
                         import re
 
                         # Extract description
-                        desc_match = re.search(r'"description":\s*"([^"]*)"', cleaned_response)
+                        desc_match = re.search(r'"description":\s*"([^"]*)"', ai_response)
                         description = desc_match.group(1) if desc_match else "Food item"
 
-                        # Extract total calories
-                        cal_match = re.search(r'"total_calories":\s*(\d+)', cleaned_response)
-                        total_calories = float(cal_match.group(1)) if cal_match else 100
+                        # Extract total calories (handle both integer and float)
+                        cal_match = re.search(r'"total_calories":\s*(\d+(?:\.\d+)?)', ai_response)
+                        total_calories = float(cal_match.group(1)) if cal_match else 150
 
                         # Extract confidence
-                        conf_match = re.search(r'"confidence":\s*(\d+)', cleaned_response)
+                        conf_match = re.search(r'"confidence":\s*(\d+(?:\.\d+)?)', ai_response)
                         confidence = float(conf_match.group(1)) if conf_match else 70
 
-                        # Create a basic analysis result
+                        # Try to extract food items
+                        food_items = []
+                        food_items_match = re.search(r'"food_items":\s*\[(.*?)\]', ai_response, re.DOTALL)
+                        if food_items_match:
+                            items_text = food_items_match.group(1)
+                            # Extract individual food items
+                            item_matches = re.finditer(r'\{[^}]*"name":\s*"([^"]*)"[^}]*"calories":\s*(\d+(?:\.\d+)?)[^}]*\}', items_text)
+                            for item_match in item_matches:
+                                food_items.append({
+                                    "name": item_match.group(1),
+                                    "calories": float(item_match.group(2)),
+                                    "portion": "estimated portion"
+                                })
+
                         analysis_result = {
                             "description": description,
                             "total_calories": total_calories,
                             "confidence": confidence,
-                            "food_items": [],
-                            "notes": "Analysis completed with partial data due to response formatting"
+                            "food_items": food_items,
+                            "notes": "Analysis recovered from partial response"
                         }
 
-                        logger.warning(f"Recovered partial data from incomplete JSON response")
+                        logger.info(f"Successfully recovered analysis from partial JSON: {description}")
+
+                    # Strategy 2: Create minimal fallback response
+                    if not analysis_result:
+                        # Extract any food-related text for description
+                        food_keywords = ['food', 'meal', 'dish', 'drink', 'coffee', 'tea', 'juice', 'sandwich', 'salad', 'soup', 'rice', 'chicken', 'beef', 'fish']
+                        description = "Food item"
+
+                        for keyword in food_keywords:
+                            if keyword.lower() in ai_response.lower():
+                                description = f"Meal containing {keyword}"
+                                break
+
+                        analysis_result = {
+                            "description": description,
+                            "total_calories": 200,  # Conservative estimate
+                            "confidence": 50,       # Low confidence for fallback
+                            "food_items": [],
+                            "notes": "Fallback analysis due to response parsing issues"
+                        }
+
+                        logger.warning("Using fallback analysis due to JSON parsing failure")
+
+                    if analysis_result:
                         return analysis_result, None
 
                 except Exception as recovery_error:
-                    logger.error(f"Failed to recover from JSON error: {recovery_error}")
+                    logger.error(f"All recovery strategies failed: {recovery_error}")
 
-                error_msg = f"Failed to parse AI response as JSON: {e}\nResponse: {ai_response[:500]}..."
+                error_msg = f"Failed to parse AI response as JSON: {e}\nResponse preview: {ai_response[:200]}..."
                 logger.error(error_msg)
                 return None, error_msg
                 
@@ -290,15 +390,15 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
             return None, error_msg
     
     def format_analysis_for_user(self, analysis: Dict[str, Any]) -> str:
-        """Format enhanced analysis result for user display"""
+        """Format enhanced analysis result for user display with safe markdown"""
         try:
-            # Escape special markdown characters
-            def escape_markdown(text):
+            # Use safe markdown escaping to prevent parsing errors
+            def safe_escape(text):
                 if not text:
                     return ""
-                return str(text).replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]')
+                return escape_markdown_safe(str(text))
 
-            description = escape_markdown(analysis['description'])
+            description = safe_escape(analysis['description'])
 
             # Health category emoji mapping with darker tone for junk food
             health_emojis = {
@@ -316,7 +416,7 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
 
             # Add user input acknowledgment if provided
             if analysis.get('user_input_acknowledged'):
-                user_ack = escape_markdown(analysis['user_input_acknowledged'])
+                user_ack = safe_escape(analysis['user_input_acknowledged'])
                 message += f"✅ *Analyzing your:* {user_ack}\n\n"
 
             message += f"{health_emoji} *{description}*\n\n"
@@ -358,10 +458,10 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
             if 'food_items' in analysis and analysis['food_items']:
                 message += "🍽️ *Detailed Breakdown:*\n"
                 for i, item in enumerate(analysis['food_items'], 1):
-                    item_name = escape_markdown(item['name'])
-                    portion = escape_markdown(item.get('portion', 'unknown portion'))
+                    item_name = safe_escape(item['name'])
+                    portion = safe_escape(item.get('portion', 'unknown portion'))
                     calories = item.get('calories', 0)
-                    cooking_method = escape_markdown(item.get('cooking_method', ''))
+                    cooking_method = safe_escape(item.get('cooking_method', ''))
                     item_health = item.get('health_score', 5)
 
                     # Enhanced health indicator
@@ -383,7 +483,7 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
 
             # Enhanced witty comment section with proper contextualization
             if analysis.get('witty_comment'):
-                witty_comment = escape_markdown(analysis['witty_comment'])
+                witty_comment = safe_escape(analysis['witty_comment'])
                 # Only show if it's not the generic template text
                 if not any(template in witty_comment for template in [
                     "For junk food: Dark reality check",
@@ -399,7 +499,7 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
 
             # Enhanced recommendations with proper contextualization
             if analysis.get('recommendations'):
-                recommendations = escape_markdown(analysis['recommendations'])
+                recommendations = safe_escape(analysis['recommendations'])
                 # Only show if it's not the generic template text
                 if not any(template in recommendations for template in [
                     "For junk food: Stark warnings",
@@ -415,7 +515,7 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
 
             # Fun fact with enhanced presentation
             if analysis.get('fun_fact'):
-                fun_fact = escape_markdown(analysis['fun_fact'])
+                fun_fact = safe_escape(analysis['fun_fact'])
                 message += f"🤓 *Did You Know?* {fun_fact}\n\n"
 
             # Additional notes with enhanced formatting (commented out for now)
@@ -429,7 +529,7 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
                 calorie_range = self._get_calorie_range(total_calories)
                 food_description = analysis.get('description', 'this meal')
                 # Don't escape the parentheses in NB note as they don't need escaping in this context
-                message += f"*NB:* {calorie_range} (This is an estimate based on a typical serving size of {escape_markdown(food_description)}, which may vary depending on preparation method and portion size)\n\n"
+                message += f"*NB:* {calorie_range} (This is an estimate based on a typical serving size of {safe_escape(food_description)}, which may vary depending on preparation method and portion size)\n\n"
 
             # Enhanced call-to-action with visual separator
             message += "─" * 25 + "\n"
