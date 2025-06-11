@@ -31,9 +31,66 @@ def resize_image_if_needed(image: Image.Image, max_size: tuple = (1024, 1024)) -
     """Resize image if it's larger than max_size while maintaining aspect ratio"""
     if image.size[0] <= max_size[0] and image.size[1] <= max_size[1]:
         return image
-    
+
     image.thumbnail(max_size, Image.Resampling.LANCZOS)
     return image
+
+def enhance_image_for_analysis(image: Image.Image) -> Image.Image:
+    """
+    Enhance image quality for better AI food analysis
+
+    This function applies various image processing techniques to improve
+    the clarity and quality of food photos for more accurate AI analysis.
+    """
+    try:
+        from PIL import ImageEnhance, ImageFilter
+
+        # Convert to RGB if not already
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
+
+        # 1. Resize to optimal size for AI analysis (not too large, not too small)
+        # AI models work best with images around 1024x1024
+        image = resize_image_if_needed(image, max_size=(1024, 1024))
+
+        # 2. Enhance contrast to make food details more visible
+        contrast_enhancer = ImageEnhance.Contrast(image)
+        image = contrast_enhancer.enhance(1.2)  # 20% more contrast
+
+        # 3. Enhance color saturation to make food colors more vibrant
+        color_enhancer = ImageEnhance.Color(image)
+        image = color_enhancer.enhance(1.1)  # 10% more saturation
+
+        # 4. Enhance sharpness to make food textures clearer
+        sharpness_enhancer = ImageEnhance.Sharpness(image)
+        image = sharpness_enhancer.enhance(1.1)  # 10% more sharpness
+
+        # 5. Slight brightness adjustment if image is too dark
+        brightness_enhancer = ImageEnhance.Brightness(image)
+
+        # Calculate average brightness
+        import numpy as np
+        img_array = np.array(image)
+        avg_brightness = np.mean(img_array)
+
+        # If image is too dark (avg < 100), brighten it slightly
+        if avg_brightness < 100:
+            brightness_factor = min(1.3, 100 / avg_brightness)  # Cap at 30% increase
+            image = brightness_enhancer.enhance(brightness_factor)
+            logger.debug(f"Enhanced brightness by factor {brightness_factor:.2f}")
+
+        # 6. Apply subtle noise reduction for cleaner image
+        # Use a gentle blur and then sharpen to reduce noise while preserving details
+        image = image.filter(ImageFilter.GaussianBlur(radius=0.5))
+        image = sharpness_enhancer.enhance(1.05)  # Compensate for blur
+
+        logger.info("Image enhanced for AI analysis: contrast, color, sharpness, brightness optimized")
+        return image
+
+    except Exception as e:
+        logger.warning(f"Image enhancement failed, using original: {e}")
+        # Return original image if enhancement fails
+        return resize_image_if_needed(image, max_size=(1024, 1024))
 
 def format_calories(calories: float) -> str:
     """Format calories for display"""

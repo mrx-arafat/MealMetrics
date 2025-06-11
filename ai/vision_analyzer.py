@@ -6,7 +6,7 @@ import hashlib
 from PIL import Image
 from typing import Dict, Any, Optional, Tuple
 from utils.config import Config
-from utils.helpers import pil_image_to_base64, resize_image_if_needed, parse_numeric_value, escape_markdown_safe
+from utils.helpers import pil_image_to_base64, resize_image_if_needed, parse_numeric_value, escape_markdown_safe, enhance_image_for_analysis
 from .prompts import CALORIE_ANALYSIS_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -22,15 +22,24 @@ class VisionAnalyzer:
         self._analysis_cache = {}
 
     def _get_image_hash(self, image: Image.Image) -> str:
-        """Generate a hash for the image to detect identical images"""
-        # Convert image to bytes and hash it
+        """Generate a unique hash for the image including metadata"""
         import io
+        import time
+
+        # Use original image characteristics for more unique hashing
         img_byte_arr = io.BytesIO()
-        # Resize to standard size for consistent hashing
-        standardized_image = image.resize((256, 256))
-        standardized_image.save(img_byte_arr, format='JPEG', quality=85)
-        img_byte_arr = img_byte_arr.getvalue()
-        return hashlib.md5(img_byte_arr).hexdigest()
+
+        # Include original dimensions and current timestamp in hash
+        # This prevents different images from having the same hash
+        image_info = f"{image.size[0]}x{image.size[1]}_{int(time.time() * 1000)}"
+
+        # Save original image (not resized) for unique hash
+        image.save(img_byte_arr, format='JPEG', quality=95)
+        img_bytes = img_byte_arr.getvalue()
+
+        # Combine image bytes with metadata for unique hash
+        combined_data = img_bytes + image_info.encode('utf-8')
+        return hashlib.md5(combined_data).hexdigest()
         
     def analyze_food_image(self, image: Image.Image, caption: Optional[str] = None) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """
@@ -44,17 +53,13 @@ class VisionAnalyzer:
             Tuple of (analysis_result, error_message)
         """
         try:
-            # Resize image if needed to reduce API costs and improve processing
-            processed_image = resize_image_if_needed(image, max_size=(1024, 1024))
+            # Enhanced image preprocessing for better AI analysis
+            processed_image = enhance_image_for_analysis(image)
+            logger.info("Applied advanced image enhancement for optimal AI analysis")
 
-            # Generate cache key based on image hash and caption
-            image_hash = self._get_image_hash(processed_image)
-            cache_key = f"{image_hash}_{caption or 'no_caption'}"
-
-            # Check cache for identical image analysis
-            if cache_key in self._analysis_cache:
-                logger.info(f"Using cached analysis for image hash: {image_hash[:8]}...")
-                return self._analysis_cache[cache_key], None
+            # CACHE DISABLED: Always analyze fresh to prevent showing wrong results for different photos
+            # This ensures each photo gets its own unique analysis
+            logger.info("Analyzing fresh image (cache disabled for accuracy)")
             
             # Convert image to base64
             image_base64 = pil_image_to_base64(processed_image, format="JPEG")
@@ -353,14 +358,7 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
                 if analysis_result['total_calories'] < 0:
                     analysis_result['total_calories'] = 0
                 
-                # Cache the result for consistency
-                self._analysis_cache[cache_key] = analysis_result
-
-                # Limit cache size to prevent memory issues
-                if len(self._analysis_cache) > 100:
-                    # Remove oldest entries (simple FIFO)
-                    oldest_key = next(iter(self._analysis_cache))
-                    del self._analysis_cache[oldest_key]
+                # Cache disabled - each photo gets fresh analysis for accuracy
 
                 # Debug logging to see what fields we actually got
                 available_fields = list(analysis_result.keys())
