@@ -120,44 +120,88 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
                 "top_p": 0.1         # Very low top_p for more deterministic output
             }
             
-            # Make API request with retry logic
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    response = requests.post(
-                        f"{self.base_url}/chat/completions",
-                        headers=headers,
-                        json=payload,
-                        timeout=45  # Increased timeout for VPS environments
-                    )
+            # ULTRA-SMART: Try multiple AI models for maximum accuracy
+            models_to_try = [
+                Config.OPENROUTER_MODEL,  # Primary model
+                "google/gemini-2.5-flash-preview",  # Backup model 1
+                "anthropic/claude-3.5-sonnet",  # Backup model 2
+            ]
 
-                    if response.status_code == 200:
-                        break
-                    elif response.status_code == 429:  # Rate limit
+            successful_response = None
+            final_error = None
+
+            for model_index, model in enumerate(models_to_try):
+                logger.info(f"🤖 Trying AI model {model_index + 1}/{len(models_to_try)}: {model}")
+
+                # Update payload with current model
+                current_payload = payload.copy()
+                current_payload["model"] = model
+
+                # Adjust parameters for different models
+                if "claude" in model.lower():
+                    current_payload["max_tokens"] = 3000
+                    current_payload["temperature"] = 0.0
+                elif "gemini" in model.lower():
+                    current_payload["max_tokens"] = 2500
+                    current_payload["temperature"] = 0.1
+
+                # Make API request with retry logic for each model
+                max_retries = 2  # Reduced per model, but trying multiple models
+                for attempt in range(max_retries):
+                    try:
+                        response = requests.post(
+                            f"{self.base_url}/chat/completions",
+                            headers=headers,
+                            json=current_payload,
+                            timeout=45
+                        )
+
+                        if response.status_code == 200:
+                            successful_response = response
+                            logger.info(f"✅ Success with model: {model}")
+                            break
+                        elif response.status_code == 429:  # Rate limit
+                            if attempt < max_retries - 1:
+                                wait_time = (attempt + 1) * 2
+                                logger.warning(f"Rate limited on {model}, waiting {wait_time}s before retry {attempt + 1}")
+                                time.sleep(wait_time)
+                                continue
+                        else:
+                            error_msg = f"Model {model} failed with status {response.status_code}: {response.text}"
+                            logger.warning(error_msg)
+                            final_error = error_msg
+                            break
+
+                    except requests.exceptions.Timeout:
+                        error_msg = f"Model {model} timed out on attempt {attempt + 1}"
+                        logger.warning(error_msg)
+                        final_error = error_msg
                         if attempt < max_retries - 1:
-                            wait_time = (attempt + 1) * 2
-                            logger.warning(f"Rate limited, waiting {wait_time}s before retry {attempt + 1}")
-                            time.sleep(wait_time)
+                            time.sleep(2)
                             continue
+                        break
+                    except requests.exceptions.RequestException as e:
+                        error_msg = f"Network error with model {model}: {e}"
+                        logger.warning(error_msg)
+                        final_error = error_msg
+                        break
 
-                    error_msg = f"API request failed with status {response.status_code}: {response.text}"
-                    logger.error(error_msg)
-                    return None, error_msg
+                # If we got a successful response, break out of model loop
+                if successful_response:
+                    break
 
-                except requests.exceptions.Timeout:
-                    if attempt < max_retries - 1:
-                        logger.warning(f"Request timeout, retrying {attempt + 1}/{max_retries}")
-                        continue
-                    error_msg = "Request to AI service timed out after multiple attempts"
-                    logger.error(error_msg)
-                    return None, error_msg
-                except requests.exceptions.RequestException as e:
-                    if attempt < max_retries - 1:
-                        logger.warning(f"Network error, retrying {attempt + 1}/{max_retries}: {e}")
-                        continue
-                    error_msg = f"Network error when calling AI service: {e}"
-                    logger.error(error_msg)
-                    return None, error_msg
+                # If not the last model, wait before trying next
+                if model_index < len(models_to_try) - 1:
+                    logger.info(f"⏳ Trying next model in 1 second...")
+                    time.sleep(1)
+
+            # Check if any model succeeded
+            if not successful_response:
+                error_msg = f"All AI models failed. Last error: {final_error}"
+                logger.error(error_msg)
+                return None, error_msg
+
+            response = successful_response
 
             # Parse response
             try:
