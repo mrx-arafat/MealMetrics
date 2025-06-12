@@ -25,9 +25,13 @@ MealMetrics is an intelligent Telegram bot that revolutionizes how you track you
 
 - **Smart Food Recognition** - Advanced AI vision analysis with caption-priority system
 - **Accurate Calorie Estimation** - Precise nutritional breakdown with macronutrients
+- **Enhanced Consistency** - Image hashing and caching for consistent analysis results
+- **Ultra-Smart Detection** - Improved handling of blurry images with image enhancement
 - **Health Scoring** - Intelligent health assessment (1-10 scale)
 - **Daily Tracking** - Complete meal history and statistics
 - **Witty AI Personality** - Engaging recommendations, especially for junk food
+- **Robust Error Handling** - Improved reliability with comprehensive error recovery
+- **Reliable Photo Processing** - Enhanced handling of photo analysis errors
 - **Flexible Storage** - Support for both SQLite and MySQL databases
 - **Privacy First** - Your data stays secure and private
 
