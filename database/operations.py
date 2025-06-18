@@ -11,9 +11,29 @@ class MealOperations:
     def __init__(self, db_manager: DatabaseManager):
         self.db = db_manager
     
-    def log_meal(self, user_id: int, description: str, calories: float, 
+    def log_meal(self, user_id: int, description: str, calories: float,
                  confidence: float = None, image_path: str = None) -> bool:
         """Log a confirmed meal to the database"""
+        # Input validation
+        if not description or not isinstance(description, str):
+            logger.error(f"Invalid description for user {user_id}: {description}")
+            return False
+
+        if len(description.strip()) == 0:
+            logger.error(f"Empty description for user {user_id}")
+            return False
+
+        if len(description) > 1000:  # Reasonable limit
+            logger.warning(f"Description too long for user {user_id}, truncating")
+            description = description[:1000]
+
+        if not isinstance(calories, (int, float)) or calories < 0:
+            logger.error(f"Invalid calories for user {user_id}: {calories}")
+            return False
+
+        if calories > 10000:  # Reasonable upper limit
+            logger.warning(f"Calories seem too high for user {user_id}: {calories}")
+
         try:
             with self.db.get_connection() as conn:
                 cursor = conn.cursor()
@@ -153,8 +173,8 @@ class MealOperations:
                 return {
                     'total_calories': total_calories,
                     'total_meals': total_meals,
-                    'avg_calories_per_day': total_calories / days_tracked,
-                    'avg_meals_per_day': total_meals / days_tracked,
+                    'avg_calories_per_day': total_calories / days_tracked if days_tracked > 0 else 0,
+                    'avg_meals_per_day': total_meals / days_tracked if days_tracked > 0 else 0,
                     'days_tracked': days_tracked,
                     'daily_summaries': summaries
                 }

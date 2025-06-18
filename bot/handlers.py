@@ -214,7 +214,7 @@ class BotHandlers:
                     # Convert to RGB if necessary
                     if image.mode != 'RGB':
                         image = image.convert('RGB')
-                    
+
                     # Analyze the image with caption context
                     analysis_result, error = self.vision_analyzer.analyze_food_image(image, caption)
                 
@@ -312,11 +312,14 @@ class BotHandlers:
                         parse_mode=None  # No markdown parsing
                     )
                 
-            except Exception as e:
-                # Clean up temp file on error
+            finally:
+                # Always clean up temp file
                 if os.path.exists(temp_path):
-                    os.unlink(temp_path)
-                raise e
+                    try:
+                        os.unlink(temp_path)
+                        logger.debug(f"Cleaned up temp file: {temp_path}")
+                    except Exception as cleanup_error:
+                        logger.warning(f"Failed to cleanup temp file {temp_path}: {cleanup_error}")
                 
         except Exception as e:
             logger.error(f"Error processing photo for user {user_id}: {e}")
@@ -409,7 +412,8 @@ class BotHandlers:
                     current_date = datetime.fromisoformat(date_str)
                     prev_date = (current_date - timedelta(days=1)).date().isoformat()
                     await self._handle_view_history(query, prev_date)
-                except:
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Error parsing date for history navigation: {e}")
                     await self._handle_view_history(query)
             elif action == CallbackData.HISTORY_NEXT:
                 date_str = params[0] if params else get_current_date()
@@ -419,7 +423,8 @@ class BotHandlers:
                     current_date = datetime.fromisoformat(date_str)
                     next_date = (current_date + timedelta(days=1)).date().isoformat()
                     await self._handle_view_history(query, next_date)
-                except:
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Error parsing date for history navigation: {e}")
                     await self._handle_view_history(query)
             elif action == CallbackData.HELP:
                 await self._handle_help(query)
@@ -673,7 +678,8 @@ class BotHandlers:
             from datetime import datetime
             date_obj = datetime.fromisoformat(date_str)
             formatted_date = date_obj.strftime("%B %d, %Y")  # e.g., "January 15, 2024"
-        except:
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Error formatting date {date_str}: {e}")
             formatted_date = date_str
 
         # Create history message
@@ -724,7 +730,8 @@ class BotHandlers:
             prev_date = (current_date - timedelta(days=1)).date().isoformat()
             next_date = (current_date + timedelta(days=1)).date().isoformat()
 
-        except:
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Error calculating navigation dates for {date_str}: {e}")
             has_prev = False
             has_next = False
             prev_date = None

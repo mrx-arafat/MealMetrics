@@ -12,9 +12,31 @@ class MySQLMealOperations:
     def __init__(self, db_manager: MySQLDatabaseManager):
         self.db = db_manager
     
-    def log_meal(self, user_id: int, description: str, calories: float, 
+    def log_meal(self, user_id: int, description: str, calories: float,
                  confidence: float = None, image_path: str = None) -> bool:
         """Log a confirmed meal to the database"""
+        # Input validation (same as SQLite operations)
+        if not description or not isinstance(description, str):
+            logger.error(f"Invalid description for user {user_id}: {description}")
+            return False
+
+        if len(description.strip()) == 0:
+            logger.error(f"Empty description for user {user_id}")
+            return False
+
+        if len(description) > 1000:  # Reasonable limit
+            logger.warning(f"Description too long for user {user_id}, truncating")
+            description = description[:1000]
+
+        if not isinstance(calories, (int, float)) or calories < 0:
+            logger.error(f"Invalid calories for user {user_id}: {calories}")
+            return False
+
+        if calories > 10000:  # Reasonable upper limit
+            logger.warning(f"Calories seem too high for user {user_id}: {calories}")
+
+        conn = None
+        cursor = None
         try:
             conn = self.db.get_connection()
             cursor = conn.cursor()
@@ -22,25 +44,31 @@ class MySQLMealOperations:
             bangladesh_tz = timezone(timedelta(hours=6))
             now = datetime.now(bangladesh_tz)
             today = date.today()
-            
+
             # Insert meal
             cursor.execute('''
-                INSERT INTO meals 
+                INSERT INTO meals
                 (user_id, description, calories, confidence, image_path, timestamp, date)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             ''', (user_id, description, calories, confidence, image_path, now, today))
-            
+
             # Update daily summary
             self._update_daily_summary(cursor, user_id, today, calories)
-            
-            cursor.close()
-            conn.close()
+
+            conn.commit()
             logger.info(f"Meal logged for user {user_id}: {description} ({calories} cal)")
             return True
-            
+
         except mysql.connector.Error as e:
             logger.error(f"Error logging meal for user {user_id}: {e}")
+            if conn:
+                conn.rollback()
             return False
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
     
     def _update_daily_summary(self, cursor, user_id: int, date_obj: date, calories: float):
         """Update or create daily summary"""
@@ -165,8 +193,8 @@ class MySQLMealOperations:
             return {
                 'total_calories': total_calories,
                 'total_meals': total_meals,
-                'avg_calories_per_day': total_calories / days_tracked,
-                'avg_meals_per_day': total_meals / days_tracked,
+                'avg_calories_per_day': total_calories / days_tracked if days_tracked > 0 else 0,
+                'avg_meals_per_day': total_meals / days_tracked if days_tracked > 0 else 0,
                 'days_tracked': days_tracked,
                 'daily_summaries': summaries
             }
