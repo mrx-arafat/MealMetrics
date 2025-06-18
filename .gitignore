@@ -134,3 +134,24 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Development Documentation (keep only main docs)
+*_FIXES.md
+*_IMPROVEMENTS.md
+*_UPGRADE.md
+FINAL_*.md
+CACHE_*.md
+CONSISTENCY_*.md
+PHOTO_*.md
+ULTRA_*.md
+
+# Development Test Files
+test_*.py
+*_test.py
+debug_*.py
+temp_*.py
+
+# AI Model Cache/Temp Files
+*.cache
+model_cache/
+ai_cache/
