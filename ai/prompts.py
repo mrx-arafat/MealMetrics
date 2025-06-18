@@ -27,10 +27,11 @@ ANALYSIS REQUIREMENTS:
 8. **Smart Recommendations**: Provide witty, helpful advice especially for unhealthy choices
 
 🚨 CRITICAL: DESCRIPTION FORMAT REQUIREMENTS:
-- Use simple, comma-separated food items: "Fried Chicken Curry, Fried Rice, Sliced Onions"
+- Use simple, comma-separated food items based on what you ACTUALLY see in the image
 - NO verbose phrases like "A meal consisting of..." or "This dish features..."
 - Focus on main food components only
 - Keep descriptions concise and clear for food diary entries
+- NEVER use template examples - describe the ACTUAL food in the image
 
 🧠 ULTRA-INTELLIGENT DETECTION FOR CHALLENGING IMAGES:
 When images are blurry, dark, or unclear, use these ADVANCED techniques:
@@ -76,6 +77,28 @@ When images are blurry, dark, or unclear, use these ADVANCED techniques:
 4. **Use plate context** - Size and layout help estimate portions
 5. **Detect cooking methods** - Glossy = oil/sauce, matte = dry cooking
 
+🚨 HANDLING UNCLEAR/AMBIGUOUS IMAGES:
+When the image is too unclear to identify specific foods:
+
+**CONFIDENCE LEVELS**:
+- **High Confidence (80-95%)**: Clear, identifiable foods
+- **Medium Confidence (60-79%)**: Some uncertainty but reasonable identification
+- **Low Confidence (40-59%)**: Very unclear, best guess based on colors/shapes
+- **Very Low Confidence (20-39%)**: Extremely unclear, generic food categories only
+
+**FOR UNCLEAR IMAGES**:
+- **Be honest about uncertainty** in confidence score
+- **Use generic food categories** (e.g., "Mixed Rice Dish", "Curry-based Meal")
+- **Provide calorie ranges** rather than exact numbers
+- **Mention assumptions** in the notes field
+- **Suggest better photo** in recommendations if confidence < 50%
+
+**EXAMPLE FOR UNCLEAR IMAGE**:
+- Description: "Mixed Rice Dish with Sauce" (not specific food names)
+- Confidence: 45% (honest about uncertainty)
+- Notes: "Image quality makes specific identification difficult"
+- Recommendations: "For more accurate analysis, try taking a clearer photo with better lighting"
+
 DETAILED ANALYSIS FACTORS:
 - **Visual Cues**: Oil shine (indicates frying), char marks (grilling), golden color (baking), etc.
 - **Portion Accuracy**: Compare to standard serving sizes, use plate/utensil proportions
@@ -110,18 +133,20 @@ IMPORTANT: All numeric fields (calories, carbs, protein, fat, confidence, health
 🚨 CRITICAL: YOU MUST INCLUDE ALL FIELDS BELOW - NO EXCEPTIONS! 🚨
 Missing any field will cause parsing errors and poor user experience.
 
+🚨 CRITICAL: ANALYZE THE ACTUAL IMAGE - DO NOT USE TEMPLATE EXAMPLES! 🚨
+
 Format your response as valid JSON only with ALL required fields:
 {
-    "description": "Fried Chicken Curry, Fried Rice, Sliced Onions",
+    "description": "ANALYZE THE ACTUAL FOOD IN THE IMAGE - comma-separated items you see",
     "food_items": [
         {
-            "name": "specific food item name",
-            "portion": "precise portion size with measurements",
+            "name": "ACTUAL food item you identify in the image",
+            "portion": "precise portion size with measurements based on what you see",
             "calories": 250,
             "carbs": 30,
             "protein": 25,
             "fat": 10,
-            "cooking_method": "preparation method",
+            "cooking_method": "preparation method you observe",
             "health_score": 7
         }
     ],
@@ -132,10 +157,10 @@ Format your response as valid JSON only with ALL required fields:
     "confidence": 85,
     "health_category": "healthy/moderate/junk",
     "health_score": 8,
-    "witty_comment": "Write a specific, personalized comment about THIS meal. For junk food: Dark reality check about health consequences. For healthy food: Positive reinforcement. For moderate: Balanced perspective.",
-    "recommendations": "Write specific, actionable advice for THIS meal. For junk food: Stark warnings and healthier alternatives. For healthy food: Ways to maintain habits. For moderate: Improvement suggestions.",
-    "fun_fact": "Interesting nutritional or food fact related to this meal",
-    "notes": "Additional observations, assumptions, or analysis details",
+    "witty_comment": "Write a specific, personalized comment about THIS ACTUAL meal you analyzed. For junk food: Dark reality check about health consequences. For healthy food: Positive reinforcement. For moderate: Balanced perspective.",
+    "recommendations": "Write specific, actionable advice for THIS ACTUAL meal you analyzed. For junk food: Stark warnings and healthier alternatives. For healthy food: Ways to maintain habits. For moderate: Improvement suggestions.",
+    "fun_fact": "Interesting nutritional or food fact related to this ACTUAL meal",
+    "notes": "Additional observations, assumptions, or analysis details about what you actually see",
     "user_input_acknowledged": "Brief confirmation of what user told you (if caption provided, otherwise null)"
 }
 
@@ -175,12 +200,14 @@ DESCRIPTION FORMAT REQUIREMENTS:
 - Keep it under 50 characters when possible
 - Use proper food names, not descriptions
 
-GOOD EXAMPLES:
-- "Fried Chicken Curry, Fried Rice, Sliced Onions"
-- "Grilled Chicken Breast, Steamed Broccoli, Rice"
-- "Pepperoni Pizza Slice, Side Salad"
-- "Chocolate Chip Cookies (3 pieces)"
-- "Mango Juice (500ml)"
+GOOD FORMAT EXAMPLES (ANALYZE YOUR ACTUAL IMAGE):
+- "Mixed Rice Dish, Vegetable Curry" (if you see rice and curry)
+- "Grilled Chicken Breast, Steamed Broccoli, Rice" (if you see these items)
+- "Pizza Slice, Side Salad" (if you see pizza and salad)
+- "Cookies (3 pieces)" (if you see cookies)
+- "Fruit Juice (500ml)" (if you see juice)
+
+🚨 IMPORTANT: These are FORMAT examples only - describe what you ACTUALLY see in the image!
 
 BAD EXAMPLES:
 - "A meal consisting of a tray divided into three compartments..."

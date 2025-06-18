@@ -18,8 +18,7 @@ class VisionAnalyzer:
         self.api_key = Config.OPENROUTER_API_KEY
         self.model = Config.OPENROUTER_MODEL
         self.base_url = Config.OPENROUTER_BASE_URL
-        # Cache for consistent results on identical images
-        self._analysis_cache = {}
+        # NO CACHE - Each image gets fresh analysis for accuracy
 
     def _get_image_hash(self, image: Image.Image) -> str:
         """Generate a unique hash for the image including metadata"""
@@ -64,8 +63,20 @@ class VisionAnalyzer:
             # Convert image to base64
             image_base64 = pil_image_to_base64(processed_image, format="JPEG")
             
-            # Prepare the enhanced prompt with caption context
-            enhanced_prompt = CALORIE_ANALYSIS_PROMPT
+            # Prepare the enhanced prompt with caption context and randomization
+            import random
+
+            # Add randomization to prevent template responses
+            random_instruction = random.choice([
+                "🎯 ANALYZE THIS SPECIFIC IMAGE - Do not use template examples!",
+                "🔍 LOOK AT THE ACTUAL FOOD - Describe what you really see!",
+                "📸 EXAMINE THIS UNIQUE PHOTO - Give fresh analysis!",
+                "🧠 FOCUS ON THIS IMAGE - No generic responses!",
+                "👁️ STUDY THIS MEAL - Provide original analysis!"
+            ])
+
+            enhanced_prompt = f"{random_instruction}\n\n{CALORIE_ANALYSIS_PROMPT}"
+
             if caption:
                 enhanced_prompt += f"""
 
@@ -95,6 +106,10 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
                 "Content-Type": "application/json"
             }
 
+            # Add unique timestamp to ensure fresh analysis
+            current_timestamp = int(time.time() * 1000)
+            unique_prompt = f"{enhanced_prompt}\n\n🕐 Analysis Timestamp: {current_timestamp} (Ensure fresh analysis)"
+
             payload = {
                 "model": self.model,
                 "messages": [
@@ -103,7 +118,7 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
                         "content": [
                             {
                                 "type": "text",
-                                "text": enhanced_prompt
+                                "text": unique_prompt
                             },
                             {
                                 "type": "image_url",
@@ -115,9 +130,9 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
                     }
                 ],
                 "max_tokens": 2500,  # Increased for more detailed analysis
-                "temperature": 0.1,  # Zero temperature for maximum consistency
-                "seed": 42,          # Fixed seed for reproducible results
-                "top_p": 0.1         # Very low top_p for more deterministic output
+                "temperature": 0.2,  # Slightly higher for more varied responses
+                "seed": current_timestamp % 10000,  # Dynamic seed based on timestamp
+                "top_p": 0.3         # Slightly higher for more creativity
             }
             
             # ULTRA-SMART: Try multiple AI models for maximum accuracy
