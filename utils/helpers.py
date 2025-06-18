@@ -174,21 +174,25 @@ def get_current_date() -> str:
     return date.today().isoformat()
 
 def get_current_datetime() -> str:
-    """Get current datetime in ISO format"""
-    return datetime.now().isoformat()
+    """Get current datetime in Bangladesh timezone (UTC+6)"""
+    bangladesh_tz = timezone(timedelta(hours=6))
+    return datetime.now(bangladesh_tz).isoformat()
 
 def format_timestamp_for_user(timestamp_str: str, user_timezone_offset: int = None) -> str:
     """
-    Format timestamp for user display with timezone consideration
+    Format timestamp for user display with Bangladesh timezone (UTC+6) as default
 
     Args:
         timestamp_str: ISO format timestamp string
         user_timezone_offset: User's timezone offset in seconds (from Telegram)
 
     Returns:
-        Formatted time string (HH:MM)
+        Formatted time string (HH:MM) in Bangladesh time
     """
     try:
+        # Bangladesh timezone (UTC+6)
+        bangladesh_tz = timezone(timedelta(hours=6))
+
         # Parse the timestamp
         if timestamp_str.endswith('Z'):
             # UTC timestamp
@@ -200,17 +204,22 @@ def format_timestamp_for_user(timestamp_str: str, user_timezone_offset: int = No
             # Assume UTC if no timezone info
             dt = datetime.fromisoformat(timestamp_str).replace(tzinfo=timezone.utc)
 
-        # Convert to user's timezone if offset provided
+        # Convert to Bangladesh timezone (default) or user's timezone if provided
         if user_timezone_offset is not None:
             user_tz = timezone(timedelta(seconds=user_timezone_offset))
             dt = dt.astimezone(user_tz)
+        else:
+            # Default to Bangladesh timezone (UTC+6)
+            dt = dt.astimezone(bangladesh_tz)
 
         return dt.strftime("%H:%M")
     except Exception as e:
         logger.warning(f"Error formatting timestamp {timestamp_str}: {e}")
-        # Fallback to simple parsing
+        # Fallback to simple parsing with Bangladesh timezone
         try:
             dt = datetime.fromisoformat(timestamp_str.replace('Z', ''))
+            # Add 6 hours for Bangladesh timezone
+            dt = dt + timedelta(hours=6)
             return dt.strftime("%H:%M")
         except:
             return "00:00"

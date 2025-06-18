@@ -1,4 +1,4 @@
-from datetime import datetime, date
+from datetime import datetime, date, timezone, timedelta
 from typing import Optional, List, Dict, Any
 import logging
 from .models import DatabaseManager
@@ -17,7 +17,9 @@ class MealOperations:
         try:
             with self.db.get_connection() as conn:
                 cursor = conn.cursor()
-                now = datetime.now()
+                # Use Bangladesh timezone (UTC+6)
+                bangladesh_tz = timezone(timedelta(hours=6))
+                now = datetime.now(bangladesh_tz)
                 today = date.today().isoformat()
                 
                 # Insert meal
@@ -46,8 +48,10 @@ class MealOperations:
             (user_id, date_str)
         )
         result = cursor.fetchone()
-        
-        now = datetime.now().isoformat()
+
+        # Use Bangladesh timezone (UTC+6)
+        bangladesh_tz = timezone(timedelta(hours=6))
+        now = datetime.now(bangladesh_tz).isoformat()
         
         if result:
             # Update existing summary

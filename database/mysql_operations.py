@@ -1,5 +1,5 @@
 import mysql.connector
-from datetime import datetime, date
+from datetime import datetime, date, timezone, timedelta
 from typing import Optional, List, Dict, Any
 import logging
 from .mysql_manager import MySQLDatabaseManager
@@ -18,7 +18,9 @@ class MySQLMealOperations:
         try:
             conn = self.db.get_connection()
             cursor = conn.cursor()
-            now = datetime.now()
+            # Use Bangladesh timezone (UTC+6)
+            bangladesh_tz = timezone(timedelta(hours=6))
+            now = datetime.now(bangladesh_tz)
             today = date.today()
             
             # Insert meal
@@ -48,8 +50,10 @@ class MySQLMealOperations:
             (user_id, date_obj)
         )
         result = cursor.fetchone()
-        
-        now = datetime.now()
+
+        # Use Bangladesh timezone (UTC+6)
+        bangladesh_tz = timezone(timedelta(hours=6))
+        now = datetime.now(bangladesh_tz)
         
         if result:
             # Update existing summary
