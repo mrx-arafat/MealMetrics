@@ -118,8 +118,17 @@ class BotHandlers:
     
     async def menu_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /menu command"""
+        menu_message = (
+            "┌─────────────────────────┐\n"
+            "│                                           │\n"
+            "│           🏠 **Main Menu**           │\n"
+            "│                                           │\n"
+            "└─────────────────────────┘\n\n"
+            "✨ **Choose an option below:**"
+        )
+
         await update.message.reply_text(
-            "🏠 **Main Menu**\n\nChoose an option:",
+            menu_message,
             reply_markup=self.keyboards.main_menu(),
             parse_mode=ParseMode.MARKDOWN
         )
@@ -575,8 +584,17 @@ class BotHandlers:
 
     async def _handle_main_menu(self, query):
         """Handle main menu display"""
+        menu_message = (
+            "┌─────────────────────────┐\n"
+            "│                                           │\n"
+            "│           🏠 **Main Menu**           │\n"
+            "│                                           │\n"
+            "└─────────────────────────┘\n\n"
+            "✨ **Choose an option below:**"
+        )
+
         await query.edit_message_text(
-            "🏠 **Main Menu**\n\nChoose an option:",
+            menu_message,
             reply_markup=self.keyboards.main_menu(),
             parse_mode=ParseMode.MARKDOWN
         )

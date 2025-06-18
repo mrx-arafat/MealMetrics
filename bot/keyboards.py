@@ -17,17 +17,17 @@ class BotKeyboards:
     
     @staticmethod
     def main_menu() -> InlineKeyboardMarkup:
-        """Main menu keyboard"""
+        """Main menu keyboard with improved layout"""
         keyboard = [
             [
-                InlineKeyboardButton("📊 Today's Summary", callback_data="today_summary"),
-                InlineKeyboardButton("📈 Weekly Stats", callback_data="weekly_stats")
+                InlineKeyboardButton("📊 Today's Summary", callback_data="today_summary")
             ],
             [
-                InlineKeyboardButton("📅 View History", callback_data="view_history"),
-                InlineKeyboardButton("🗑️ Manage Data", callback_data="manage_data")
+                InlineKeyboardButton("📈 Weekly Stats", callback_data="weekly_stats"),
+                InlineKeyboardButton("📅 View History", callback_data="view_history")
             ],
             [
+                InlineKeyboardButton("🗑️ Manage Data", callback_data="manage_data"),
                 InlineKeyboardButton("ℹ️ Help", callback_data="help")
             ]
         ]
