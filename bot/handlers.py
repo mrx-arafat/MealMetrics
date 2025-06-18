@@ -4,13 +4,13 @@ import tempfile
 import asyncio
 import random
 from datetime import datetime, date, timedelta
-from telegram import Update, Message
+from telegram import Update, Message, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 from PIL import Image
 
 from utils.config import Config
-from utils.helpers import validate_image_format, format_meal_summary, get_current_date, format_calories
+from utils.helpers import validate_image_format, format_meal_summary, get_current_date, format_calories, format_timestamp_for_user
 from database.models import DatabaseManager
 from database.operations import MealOperations
 from database.mysql_manager import MySQLDatabaseManager
@@ -119,9 +119,7 @@ class BotHandlers:
     async def menu_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /menu command"""
         menu_message = (
-            "┌──────────────────┐\n"
-            "│   🏠 **Main Menu**   │\n"
-            "└──────────────────┘\n\n"
+            "        🏠 **Main Menu**\n\n"
             "👇 **Choose an option below:**"
         )
 
@@ -403,6 +401,26 @@ class BotHandlers:
                 await self._handle_weekly_stats(query)
             elif action == CallbackData.VIEW_HISTORY:
                 await self._handle_view_history(query)
+            elif action == CallbackData.HISTORY_PREV:
+                date_str = params[0] if params else get_current_date()
+                # Calculate previous date
+                try:
+                    from datetime import datetime, timedelta
+                    current_date = datetime.fromisoformat(date_str)
+                    prev_date = (current_date - timedelta(days=1)).date().isoformat()
+                    await self._handle_view_history(query, prev_date)
+                except:
+                    await self._handle_view_history(query)
+            elif action == CallbackData.HISTORY_NEXT:
+                date_str = params[0] if params else get_current_date()
+                # Calculate next date
+                try:
+                    from datetime import datetime, timedelta
+                    current_date = datetime.fromisoformat(date_str)
+                    next_date = (current_date + timedelta(days=1)).date().isoformat()
+                    await self._handle_view_history(query, next_date)
+                except:
+                    await self._handle_view_history(query)
             elif action == CallbackData.HELP:
                 await self._handle_help(query)
             elif action == CallbackData.MANAGE_DATA:
@@ -583,9 +601,7 @@ class BotHandlers:
     async def _handle_main_menu(self, query):
         """Handle main menu display"""
         menu_message = (
-            "┌──────────────────┐\n"
-            "│   🏠 **Main Menu**   │\n"
-            "└──────────────────┘\n\n"
+            "        🏠 **Main Menu**\n\n"
             "👇 **Choose an option below:**"
         )
 
@@ -636,10 +652,110 @@ class BotHandlers:
             parse_mode=ParseMode.MARKDOWN
         )
 
-    async def _handle_view_history(self, query):
-        """Handle meal history viewing"""
-        # For now, show today's meals - can be extended for date navigation
-        await self._handle_today_summary(query)
+    async def _handle_view_history(self, query, date_str: str = None):
+        """Handle meal history viewing with date navigation"""
+        user_id = query.from_user.id
+
+        # If no date specified, start with today
+        if not date_str:
+            date_str = get_current_date()
+
+        # Get user's timezone offset from Telegram (if available)
+        user_timezone_offset = None
+        if hasattr(query.from_user, 'timezone_offset'):
+            user_timezone_offset = query.from_user.timezone_offset
+
+        # Get meals for the specified date
+        meals = self.meal_ops.get_user_meals_by_date(user_id, date_str)
+
+        # Format the date for display
+        try:
+            from datetime import datetime
+            date_obj = datetime.fromisoformat(date_str)
+            formatted_date = date_obj.strftime("%B %d, %Y")  # e.g., "January 15, 2024"
+        except:
+            formatted_date = date_str
+
+        # Create history message
+        if not meals:
+            message = (
+                f"📅 **Meal History - {formatted_date}**\n\n"
+                f"🍽️ No meals logged on this date.\n\n"
+                f"Use the navigation buttons to browse other dates."
+            )
+        else:
+            total_calories = sum(meal['calories'] for meal in meals)
+            meal_count = len(meals)
+
+            message = (
+                f"📅 **Meal History - {formatted_date}**\n\n"
+                f"🍽️ **Meals logged:** {meal_count}\n"
+                f"🔥 **Total calories:** {format_calories(total_calories)}\n\n"
+            )
+
+            if meal_count > 0:
+                message += "**Meals:**\n"
+                for i, meal in enumerate(meals, 1):
+                    try:
+                        # Use the timezone-aware formatting function
+                        time_str = format_timestamp_for_user(meal['timestamp'], user_timezone_offset)
+
+                        # Truncate description and escape markdown
+                        description = meal['description'][:50] + "..." if len(meal['description']) > 50 else meal['description']
+                        description = description.replace('*', '\\*').replace('_', '\\_')
+
+                        message += f"{i}. {description} - {format_calories(meal['calories'])} ({time_str})\n"
+                    except Exception as e:
+                        logger.warning(f"Error formatting meal {i}: {e}")
+                        continue
+
+        # Determine navigation availability
+        from datetime import datetime, timedelta
+        try:
+            current_date = datetime.fromisoformat(date_str)
+            today = datetime.now().date()
+
+            # Can go to previous day (no limit on past)
+            has_prev = True
+
+            # Can go to next day only if not today or future
+            has_next = current_date.date() < today
+
+            prev_date = (current_date - timedelta(days=1)).date().isoformat()
+            next_date = (current_date + timedelta(days=1)).date().isoformat()
+
+        except:
+            has_prev = False
+            has_next = False
+            prev_date = None
+            next_date = None
+
+        # Create navigation keyboard
+        keyboard = []
+
+        # Navigation row
+        nav_row = []
+        if has_prev and prev_date:
+            nav_row.append(InlineKeyboardButton("⬅️ Previous Day", callback_data=f"history_prev:{date_str}"))
+        if has_next and next_date:
+            nav_row.append(InlineKeyboardButton("➡️ Next Day", callback_data=f"history_next:{date_str}"))
+
+        if nav_row:
+            keyboard.append(nav_row)
+
+        # Action row
+        keyboard.append([
+            InlineKeyboardButton("📊 Today's Summary", callback_data="today_summary"),
+            InlineKeyboardButton("🏠 Main Menu", callback_data="main_menu")
+        ])
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await query.edit_message_text(
+            message,
+            reply_markup=reply_markup,
+            parse_mode=ParseMode.MARKDOWN
+        )
 
     async def _handle_help(self, query):
         """Handle help menu display"""

@@ -103,7 +103,6 @@ class BotKeyboards:
                 InlineKeyboardButton("🗑️ Clear Today", callback_data="clear_today")
             ],
             [
-                InlineKeyboardButton("📅 Clear Date Range", callback_data="clear_range"),
                 InlineKeyboardButton("⚠️ Clear All Data", callback_data="clear_all_confirm")
             ],
             [
