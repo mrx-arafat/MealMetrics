@@ -170,8 +170,9 @@ def format_calories(calories: float) -> str:
     return f"{calories:.1f} calories"
 
 def get_current_date() -> str:
-    """Get current date in YYYY-MM-DD format"""
-    return date.today().isoformat()
+    """Get current date in YYYY-MM-DD format using Bangladesh timezone (UTC+6)"""
+    bangladesh_tz = timezone(timedelta(hours=6))
+    return datetime.now(bangladesh_tz).date().isoformat()
 
 def get_current_datetime() -> str:
     """Get current datetime in Bangladesh timezone (UTC+6)"""

@@ -40,7 +40,7 @@ class MealOperations:
                 # Use Bangladesh timezone (UTC+6)
                 bangladesh_tz = timezone(timedelta(hours=6))
                 now = datetime.now(bangladesh_tz)
-                today = date.today().isoformat()
+                today = now.date().isoformat()  # Use Bangladesh date, not server date
                 
                 # Insert meal
                 cursor.execute('''
@@ -93,7 +93,9 @@ class MealOperations:
     def get_user_meals_today(self, user_id: int) -> List[Dict[str, Any]]:
         """Get all meals for a user today"""
         try:
-            today = date.today().isoformat()
+            # Use Bangladesh timezone (UTC+6)
+            bangladesh_tz = timezone(timedelta(hours=6))
+            today = datetime.now(bangladesh_tz).date().isoformat()
             with self.db.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
@@ -126,7 +128,9 @@ class MealOperations:
     def get_daily_summary(self, user_id: int, date_str: str = None) -> Optional[Dict[str, Any]]:
         """Get daily summary for a user"""
         if not date_str:
-            date_str = date.today().isoformat()
+            # Use Bangladesh timezone (UTC+6)
+            bangladesh_tz = timezone(timedelta(hours=6))
+            date_str = datetime.now(bangladesh_tz).date().isoformat()
         
         try:
             with self.db.get_connection() as conn:
