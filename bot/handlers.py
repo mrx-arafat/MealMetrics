@@ -119,12 +119,10 @@ class BotHandlers:
     async def menu_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /menu command"""
         menu_message = (
-            "┌─────────────────────────┐\n"
-            "│                                           │\n"
-            "│           🏠 **Main Menu**           │\n"
-            "│                                           │\n"
-            "└─────────────────────────┘\n\n"
-            "✨ **Choose an option below:**"
+            "┌──────────────────┐\n"
+            "│   🏠 **Main Menu**   │\n"
+            "└──────────────────┘\n\n"
+            "👇 **Choose an option below:**"
         )
 
         await update.message.reply_text(
@@ -585,12 +583,10 @@ class BotHandlers:
     async def _handle_main_menu(self, query):
         """Handle main menu display"""
         menu_message = (
-            "┌─────────────────────────┐\n"
-            "│                                           │\n"
-            "│           🏠 **Main Menu**           │\n"
-            "│                                           │\n"
-            "└─────────────────────────┘\n\n"
-            "✨ **Choose an option below:**"
+            "┌──────────────────┐\n"
+            "│   🏠 **Main Menu**   │\n"
+            "└──────────────────┘\n\n"
+            "👇 **Choose an option below:**"
         )
 
         await query.edit_message_text(
