@@ -464,16 +464,36 @@ class BotHandlers:
                 meals_today = self.meal_ops.get_user_meals_today(user_id)
                 total_today = sum(meal['calories'] for meal in meals_today)
 
-                success_message = (
+                # Show immediate confirmation message
+                confirmation_message = (
                     f"✅ **Meal logged successfully!**\n\n"
                     f"🍽️ {pending_meal['description']}\n"
                     f"🔥 {format_calories(pending_meal['calories'])}\n\n"
                     f"📊 **Today's total:** {format_calories(total_today)}\n"
-                    f"📝 **Meals logged today:** {len(meals_today)}"
+                    f"📝 **Meals logged today:** {len(meals_today)}\n\n"
+                    f"⏳ *This message will update in 3 seconds...*"
                 )
 
                 await query.edit_message_text(
-                    success_message,
+                    confirmation_message,
+                    parse_mode=ParseMode.MARKDOWN
+                )
+
+                # Wait for 3 seconds
+                await asyncio.sleep(3)
+
+                # Show final message with menu
+                final_message = (
+                    f"✅ **Meal logged successfully!**\n\n"
+                    f"🍽️ {pending_meal['description']}\n"
+                    f"🔥 {format_calories(pending_meal['calories'])}\n\n"
+                    f"📊 **Today's total:** {format_calories(total_today)}\n"
+                    f"📝 **Meals logged today:** {len(meals_today)}\n\n"
+                    f"📸 *Ready to track another meal? Send me a photo!*"
+                )
+
+                await query.edit_message_text(
+                    final_message,
                     reply_markup=self.keyboards.main_menu(),
                     parse_mode=ParseMode.MARKDOWN
                 )
@@ -506,8 +526,30 @@ class BotHandlers:
             success = self.db.delete_pending_meal(user_id, meal_id)
 
             if success:
+                # Show immediate cancellation message
+                cancellation_message = (
+                    f"❌ **Meal not logged**\n\n"
+                    f"The meal analysis has been cancelled and won't be added to your daily intake.\n\n"
+                    f"⏳ *This message will update in 3 seconds...*"
+                )
+
                 await query.edit_message_text(
-                    "❌ **Meal cancelled.**\n\nSend me another photo when you're ready to track a meal!",
+                    cancellation_message,
+                    parse_mode=ParseMode.MARKDOWN
+                )
+
+                # Wait for 3 seconds
+                await asyncio.sleep(3)
+
+                # Show final message with menu
+                final_message = (
+                    f"❌ **Meal not logged**\n\n"
+                    f"No worries! The meal analysis has been cancelled.\n\n"
+                    f"📸 *Ready to track a meal? Send me a photo!*"
+                )
+
+                await query.edit_message_text(
+                    final_message,
                     reply_markup=self.keyboards.main_menu(),
                     parse_mode=ParseMode.MARKDOWN
                 )
