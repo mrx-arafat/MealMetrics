@@ -464,7 +464,10 @@ class BotHandlers:
                 meals_today = self.meal_ops.get_user_meals_today(user_id)
                 total_today = sum(meal['calories'] for meal in meals_today)
 
-                # Show immediate confirmation message
+                # Remove the Log/Cancel buttons from the original analysis message
+                await query.edit_message_reply_markup(reply_markup=None)
+
+                # Send a NEW confirmation message (don't replace the analysis)
                 confirmation_message = (
                     f"✅ **Meal logged successfully!**\n\n"
                     f"🍽️ {pending_meal['description']}\n"
@@ -474,7 +477,8 @@ class BotHandlers:
                     f"⏳ *This message will update in 3 seconds...*"
                 )
 
-                await query.edit_message_text(
+                # Send new message instead of editing the analysis
+                confirmation_msg = await query.message.reply_text(
                     confirmation_message,
                     parse_mode=ParseMode.MARKDOWN
                 )
@@ -482,7 +486,7 @@ class BotHandlers:
                 # Wait for 3 seconds
                 await asyncio.sleep(3)
 
-                # Show final message with menu
+                # Update the confirmation message with final state
                 final_message = (
                     f"✅ **Meal logged successfully!**\n\n"
                     f"🍽️ {pending_meal['description']}\n"
@@ -492,7 +496,7 @@ class BotHandlers:
                     f"📸 *Ready to track another meal? Send me a photo!*"
                 )
 
-                await query.edit_message_text(
+                await confirmation_msg.edit_text(
                     final_message,
                     reply_markup=self.keyboards.main_menu(),
                     parse_mode=ParseMode.MARKDOWN
@@ -526,14 +530,18 @@ class BotHandlers:
             success = self.db.delete_pending_meal(user_id, meal_id)
 
             if success:
-                # Show immediate cancellation message
+                # Remove the Log/Cancel buttons from the original analysis message
+                await query.edit_message_reply_markup(reply_markup=None)
+
+                # Send a NEW cancellation message (don't replace the analysis)
                 cancellation_message = (
                     f"❌ **Meal not logged**\n\n"
                     f"The meal analysis has been cancelled and won't be added to your daily intake.\n\n"
                     f"⏳ *This message will update in 3 seconds...*"
                 )
 
-                await query.edit_message_text(
+                # Send new message instead of editing the analysis
+                cancellation_msg = await query.message.reply_text(
                     cancellation_message,
                     parse_mode=ParseMode.MARKDOWN
                 )
@@ -541,14 +549,14 @@ class BotHandlers:
                 # Wait for 3 seconds
                 await asyncio.sleep(3)
 
-                # Show final message with menu
+                # Update the cancellation message with final state
                 final_message = (
                     f"❌ **Meal not logged**\n\n"
                     f"No worries! The meal analysis has been cancelled.\n\n"
                     f"📸 *Ready to track a meal? Send me a photo!*"
                 )
 
-                await query.edit_message_text(
+                await cancellation_msg.edit_text(
                     final_message,
                     reply_markup=self.keyboards.main_menu(),
                     parse_mode=ParseMode.MARKDOWN
