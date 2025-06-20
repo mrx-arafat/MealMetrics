@@ -172,11 +172,20 @@ class BotHandlers:
         # Get caption if provided
         caption = update.message.caption if update.message.caption else None
 
-        # Send processing message with caption acknowledgment or tip
+        # Send initial processing message
         if caption:
-            # User provided caption - analyze directly
+            # User provided caption - show analyzing message first
             processing_msg = await update.message.reply_text(
-                f"🔍 Analyzing your meal with details: *{caption}*\n\nThis may take a moment...",
+                "🔍 **Analyzing your meal...**\n\n💡 *Getting detailed nutritional breakdown...*",
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+            # Wait for 2 seconds, then show acknowledgment
+            await asyncio.sleep(2)
+
+            # Update to show caption acknowledgment
+            processing_msg = await processing_msg.edit_text(
+                f"✅ **Acknowledged:** *{caption}*\n\n🔍 *Analyzing nutritional content...*",
                 parse_mode=ParseMode.MARKDOWN
             )
         else:
@@ -192,7 +201,7 @@ class BotHandlers:
 
             # Update message to show analysis in progress
             processing_msg = await tip_msg.edit_text(
-                "🔍 Analyzing your meal... This may take a moment.\n\n💡 *Getting detailed nutritional breakdown...*",
+                "🔍 **Analyzing your meal...**\n\n💡 *Getting detailed nutritional breakdown...*",
                 parse_mode=ParseMode.MARKDOWN
             )
         
