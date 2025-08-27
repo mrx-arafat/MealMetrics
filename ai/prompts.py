@@ -292,3 +292,216 @@ Explain briefly why the confidence level is at this percentage. Consider factors
 
 Keep the explanation concise and user-friendly.
 """
+
+# Enhanced prompt with profound health warnings
+ENHANCED_HEALTH_WARNING_PROMPT = """
+🚨 PROFOUND HEALTH WARNING SYSTEM 🚨
+You are an ADVANCED MEDICAL NUTRITION ANALYZER with expertise in metabolic health, endocrinology, and disease prevention.
+Provide DEEP, SCIENTIFIC warnings that reveal the TRUE DAMAGE being done to the body.
+
+⚠️ USER'S CRITICAL HEALTH METRICS (Example - adjust based on actual user):
+• Visceral Fat: 16.8 (DANGEROUSLY HIGH - toxic organ fat)
+• Body Fat: 30%
+• Muscle Mass: 35%
+• Metabolic Age: 45 years
+• BMI: 28
+
+🎯 ENHANCED JSON RESPONSE FORMAT with ALL fields:
+{
+    "description": "FOCUS ON FOOD ONLY - identify the actual food/drink items",
+    "food_items": [...],
+    "total_calories": 450,
+    "total_carbs": 45,
+    "total_protein": 35,
+    "total_fat": 15,
+    "confidence": 85,
+    "health_category": "healthy/moderate/junk",
+    "health_score": 8,
+
+    "profound_health_warning": "CRITICAL: With visceral fat at 16.8, this meal triggers catastrophic metabolic dysfunction. Each bite feeds the toxic fat strangling your organs, accelerating diabetes risk by 40% in 6 months.",
+
+    "immediate_body_impact": "RIGHT NOW: Blood sugar spiking to 180mg/dL, triggering massive insulin release. Inflammatory markers IL-6 and TNF-alpha surging. Liver converting excess glucose to visceral fat in real-time.",
+
+    "organ_specific_warnings": "LIVER: Processing 4x sugar capacity, accelerating fatty liver. PANCREAS: Beta cells dying from overwork. HEART: Arterial inflammation creating micro-tears. BRAIN: Sugar crash in 2 hours will impair cognition by 30%.",
+
+    "hormonal_disruption": "Insulin surge blocking fat burning for 6 hours. Leptin resistance increasing. Cortisol spiking from metabolic stress. Growth hormone suppressed, accelerating aging.",
+
+    "cellular_damage_warning": "Generating 10,000+ free radicals per cell. Mitochondria reducing energy by 40%. Telomeres shortening equivalent to 2 months aging. Protein glycation forming AGEs.",
+
+    "future_health_projection": "24 HOURS: Visceral fat +0.1%. 1 WEEK: Insulin sensitivity -2%. 1 MONTH: +2-3 lbs fat. 3 MONTHS: Pre-diabetes markers. 6 MONTHS: Metabolic syndrome. 1 YEAR: Diabetes risk 65%.",
+
+    "visceral_fat_impact": "EMERGENCY: Your 16.8 visceral fat is a toxin factory. This meal increases inflammatory cytokine production by 300%. Sugar converts to visceral fat 3x faster than subcutaneous.",
+
+    "metabolic_impact": "Metabolic rate suppressed 12 hours. Fat oxidation blocked. Muscle protein synthesis -25%. Perfect storm for muscle loss and fat gain.",
+
+    "muscle_building_score": 7,
+    "witty_comment": "Personalized comment based on health metrics",
+    "recommendations": "IMMEDIATE ACTION: Skip next meal. Drink 2L water. Walk 30 minutes NOW to blunt glucose spike.",
+    "fun_fact": "This meal ages cells equivalent to smoking 5 cigarettes",
+    "notes": "With current metrics, 2 years from irreversible metabolic damage",
+    "user_input_acknowledged": "Acknowledged with EXTREME CONCERN"
+}
+
+🔬 DETAILED WARNING COMPONENTS:
+
+**1. IMMEDIATE BODY IMPACT (What's happening RIGHT NOW):**
+- Blood sugar spikes (specify mg/dL levels)
+- Insulin response cascade
+- Inflammatory marker activation (IL-6, TNF-alpha, CRP)
+- Liver glycogen overflow and de novo lipogenesis
+- Oxidative stress generation timeline
+
+**2. ORGAN-SPECIFIC WARNINGS:**
+- **Liver:** NAFLD progression, hepatic insulin resistance, toxin accumulation
+- **Pancreas:** Beta cell exhaustion rate, insulin production stress
+- **Heart:** Endothelial dysfunction, arterial stiffness, plaque formation
+- **Brain:** Neuroinflammation, cognitive fog, dopamine dysregulation
+- **Kidneys:** Hyperfiltration stress, AGE accumulation
+- **Intestines:** Microbiome disruption, intestinal permeability
+
+**3. CELLULAR LEVEL DAMAGE:**
+- Mitochondrial dysfunction and ATP depletion
+- DNA damage and telomere shortening
+- Advanced Glycation End-products (AGEs) formation
+- Cellular senescence acceleration
+- Autophagy disruption
+
+**4. HORMONAL CASCADE EFFECTS:**
+- Insulin resistance progression (specify timeline)
+- Leptin resistance (hunger hormone disruption)
+- Cortisol elevation (stress response)
+- Ghrelin dysregulation (appetite control)
+- Thyroid function suppression
+- Sex hormone disruption
+
+**5. FUTURE HEALTH PROJECTION (Be specific with timelines):**
+- 24 hours: Immediate metabolic consequences
+- 1 week: Cumulative inflammatory burden
+- 1 month: Body composition changes
+- 3 months: Biomarker deterioration
+- 6 months: Pre-disease state probability
+- 1 year: Disease manifestation risk
+- 5 years: Irreversible damage projection
+
+🎯 PERSONALIZED WARNING INTENSITY:
+
+**For High Visceral Fat (15+):**
+- Use URGENT language: CRITICAL, EMERGENCY, CATASTROPHIC, TOXIC
+- Mention specific diseases: diabetes, heart disease, stroke
+- Include percentages and timelines
+- Emphasize irreversible damage potential
+- Use phrases like "IMMEDIATE INTERVENTION REQUIRED"
+
+**For Poor Body Composition:**
+- Explain muscle loss acceleration
+- Warn about metabolic slowdown
+- Mention bone density impacts
+- Discuss sarcopenia risks
+
+**Warning Tone Guidelines:**
+- Be scientifically accurate but ALARMING when necessary
+- Use medical terminology to show seriousness
+- Provide specific timelines for damage
+- Distinguish reversible vs irreversible effects
+- Include statistics (e.g., "increases diabetes risk by 40%")
+
+⚡ SEVERITY INDICATORS:
+- Junk food + High visceral fat = 💀🚨 (Maximum severity)
+- Moderate food + High visceral fat = ⚠️🔶 (High concern)
+- Healthy food + Any metrics = ✅💚 (Positive reinforcement)
+
+Remember: Make the user FEEL the damage happening inside their body. Your warnings could save their life.
+"""
+
+def get_enhanced_prompt(health_context=None):
+    """
+    Generate enhanced AI prompt with profound health warnings
+
+    Args:
+        health_context: User's health metrics (visceral fat, BMI, etc.)
+    """
+
+    if not health_context:
+        health_context = {
+            'visceral_fat': 16.8,
+            'body_fat': 30,
+            'muscle_mass': 35,
+            'metabolic_age': 45,
+            'bmi': 28
+        }
+
+    # Customize the enhanced prompt based on user's metrics
+    prompt = ENHANCED_HEALTH_WARNING_PROMPT.replace(
+        "16.8", str(health_context.get('visceral_fat', 16.8))
+    ).replace(
+        "30%", f"{health_context.get('body_fat', 30)}%"
+    ).replace(
+        "35%", f"{health_context.get('muscle_mass', 35)}%"
+    ).replace(
+        "45 years", f"{health_context.get('metabolic_age', 45)} years"
+    ).replace(
+        "BMI: 28", f"BMI: {health_context.get('bmi', 28)}"
+    )
+
+    return prompt
+
+# Warning templates for different scenarios
+WARNING_TEMPLATES = {
+    'high_sugar': """
+🚨 GLYCEMIC CATASTROPHE DETECTED 🚨
+This sugar bomb is triggering a metabolic emergency. Your blood glucose is skyrocketing to dangerous levels, forcing your pancreas into overdrive. With your visceral fat at {vf_level}, your cells are already insulin resistant - this meal is literally programming diabetes into your DNA.
+""",
+
+    'high_fat_junk': """
+💀 ARTERIAL DESTRUCTION IN PROGRESS 💀
+This toxic fat payload is coating your arteries with inflammatory compounds. Each bite deposits cholesterol directly into your blood vessel walls. Your {vf_level} visceral fat is amplifying the damage by 300%. Heart attack risk increasing in real-time.
+""",
+
+    'processed_food': """
+⚠️ CHEMICAL WARFARE ON YOUR CELLS ⚠️
+This ultra-processed disaster contains 15+ inflammatory compounds attacking your cellular machinery. Preservatives disrupting gut bacteria. Additives triggering autoimmune responses. Your organs are under siege from synthetic toxins.
+""",
+
+    'excessive_calories': """
+🔥 METABOLIC OVERLOAD - SYSTEM FAILURE 🔥
+{calories} calories overwhelming every metabolic pathway. Your liver cannot process this energy tsunami. Excess converting directly to visceral fat. You've just added {fat_gain}g of toxic organ fat. Recovery time: 72 hours of perfect eating.
+"""
+}
+
+def get_critical_thresholds():
+    """Define critical health thresholds for warnings"""
+    return {
+        'visceral_fat': {
+            'optimal': (1, 9),
+            'warning': (10, 12),
+            'danger': (13, 15),
+            'critical': (16, 30)  # User is here at 16.8
+        },
+        'calories': {
+            'light': (0, 300),
+            'moderate': (301, 500),
+            'heavy': (501, 700),
+            'excessive': (701, 2000)
+        },
+        'health_score': {
+            'excellent': (9, 10),
+            'good': (7, 8),
+            'moderate': (5, 6),
+            'poor': (3, 4),
+            'dangerous': (1, 2)
+        }
+    }
+
+def format_warning_by_severity(visceral_fat_level):
+    """Generate warning prefix based on visceral fat severity"""
+
+    if visceral_fat_level >= 18:
+        return "💀🚨 MEDICAL EMERGENCY - IMMEDIATE INTERVENTION REQUIRED 🚨💀"
+    elif visceral_fat_level >= 16:
+        return "🚨⚠️ CRITICAL HEALTH CRISIS - SEVERE METABOLIC DYSFUNCTION ⚠️🚨"
+    elif visceral_fat_level >= 13:
+        return "⚠️ DANGER ZONE - HIGH DISEASE RISK ⚠️"
+    elif visceral_fat_level >= 10:
+        return "⚡ WARNING - METABOLIC HEALTH DECLINING ⚡"
+    else:
+        return "📊 HEALTH ANALYSIS"
