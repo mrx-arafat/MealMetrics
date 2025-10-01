@@ -52,16 +52,38 @@ class VisionAnalyzer:
             Tuple of (analysis_result, error_message)
         """
         try:
-            # Enhanced image preprocessing for better AI analysis
-            processed_image = enhance_image_for_analysis(image)
-            logger.info("Applied advanced image enhancement for optimal AI analysis")
+            # Validate input image
+            if image is None:
+                error_msg = "Received None image for analysis"
+                logger.error(error_msg)
+                return None, error_msg
+
+            logger.info(f"Starting food image analysis - Image size: {image.size}, Mode: {image.mode}")
+
+            # Enhanced image preprocessing for better AI analysis with fallback
+            try:
+                processed_image = enhance_image_for_analysis(image)
+                logger.info("Applied advanced image enhancement for optimal AI analysis")
+            except Exception as enhancement_error:
+                logger.warning(f"Image enhancement failed, using original image: {enhancement_error}")
+                # Fallback: use original image if enhancement fails
+                processed_image = image
+                if processed_image.mode != 'RGB':
+                    processed_image = processed_image.convert('RGB')
+                logger.info("Using original image without enhancement as fallback")
 
             # CACHE DISABLED: Always analyze fresh to prevent showing wrong results for different photos
             # This ensures each photo gets its own unique analysis
             logger.info("Analyzing fresh image (cache disabled for accuracy)")
-            
-            # Convert image to base64
-            image_base64 = pil_image_to_base64(processed_image, format="JPEG")
+
+            # Convert image to base64 with error handling
+            try:
+                image_base64 = pil_image_to_base64(processed_image, format="JPEG")
+                logger.debug(f"Image converted to base64 successfully (length: {len(image_base64)} chars)")
+            except Exception as base64_error:
+                error_msg = f"Failed to convert image to base64: {base64_error}"
+                logger.error(error_msg)
+                return None, error_msg
             
             # Prepare the enhanced prompt with caption context and randomization
             import random
@@ -164,6 +186,7 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
                 max_retries = 2  # Reduced per model, but trying multiple models
                 for attempt in range(max_retries):
                     try:
+                        logger.debug(f"Sending request to {model} (attempt {attempt + 1}/{max_retries})")
                         response = requests.post(
                             f"{self.base_url}/chat/completions",
                             headers=headers,
@@ -171,9 +194,11 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
                             timeout=45
                         )
 
+                        logger.debug(f"Received response with status code: {response.status_code}")
+
                         if response.status_code == 200:
                             successful_response = response
-                            logger.info(f"✅ Success with model: {model}")
+                            logger.info(f"✅ Success with model: {model} on attempt {attempt + 1}")
                             break
                         elif response.status_code == 429:  # Rate limit
                             if attempt < max_retries - 1:
@@ -181,8 +206,32 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
                                 logger.warning(f"Rate limited on {model}, waiting {wait_time}s before retry {attempt + 1}")
                                 time.sleep(wait_time)
                                 continue
+                            else:
+                                error_msg = f"Model {model} rate limited after all retries"
+                                logger.error(error_msg)
+                                final_error = error_msg
+                                break
+                        elif response.status_code == 400:
+                            error_msg = f"Model {model} bad request (400): {response.text[:200]}"
+                            logger.error(error_msg)
+                            final_error = error_msg
+                            break
+                        elif response.status_code == 401:
+                            error_msg = f"Model {model} authentication failed (401) - Check API key"
+                            logger.error(error_msg)
+                            final_error = error_msg
+                            break
+                        elif response.status_code == 500:
+                            error_msg = f"Model {model} server error (500)"
+                            logger.error(error_msg)
+                            final_error = error_msg
+                            if attempt < max_retries - 1:
+                                logger.info(f"Retrying after server error...")
+                                time.sleep(2)
+                                continue
+                            break
                         else:
-                            error_msg = f"Model {model} failed with status {response.status_code}: {response.text}"
+                            error_msg = f"Model {model} failed with status {response.status_code}: {response.text[:200]}"
                             logger.warning(error_msg)
                             final_error = error_msg
                             break
@@ -192,6 +241,16 @@ DO NOT IDENTIFY THE FOOD FROM THE IMAGE. THE USER ALREADY TOLD YOU WHAT IT IS.
                         logger.warning(error_msg)
                         final_error = error_msg
                         if attempt < max_retries - 1:
+                            logger.info("Retrying after timeout...")
+                            time.sleep(2)
+                            continue
+                        break
+                    except requests.exceptions.ConnectionError as e:
+                        error_msg = f"Connection error with model {model}: {e}"
+                        logger.error(error_msg)
+                        final_error = error_msg
+                        if attempt < max_retries - 1:
+                            logger.info("Retrying after connection error...")
                             time.sleep(2)
                             continue
                         break

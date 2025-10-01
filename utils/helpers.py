@@ -46,17 +46,29 @@ def enhance_image_for_analysis(image: Image.Image) -> Image.Image:
         from PIL import ImageEnhance, ImageFilter, ImageOps
         import numpy as np
 
+        # Validate input image
+        if image is None:
+            logger.error("❌ Received None image for enhancement")
+            raise ValueError("Image cannot be None")
+
         # Convert to RGB if not already
         if image.mode != 'RGB':
+            logger.debug(f"Converting image from {image.mode} to RGB")
             image = image.convert('RGB')
 
         logger.info("🔧 Starting ULTRA-AGGRESSIVE image enhancement for challenging photo")
 
         # 1. Resize to optimal size for AI analysis
+        original_size = image.size
         image = resize_image_if_needed(image, max_size=(1024, 1024))
+        if image.size != original_size:
+            logger.debug(f"Resized image from {original_size} to {image.size}")
 
         # 2. AGGRESSIVE brightness and contrast analysis
         img_array = np.array(image)
+        if img_array.size == 0:
+            raise ValueError("Image array is empty")
+
         avg_brightness = np.mean(img_array)
         brightness_std = np.std(img_array)
 
@@ -66,12 +78,12 @@ def enhance_image_for_analysis(image: Image.Image) -> Image.Image:
         brightness_enhancer = ImageEnhance.Brightness(image)
         if avg_brightness < 80:
             # Very dark image - aggressive brightening
-            brightness_factor = min(2.0, 120 / avg_brightness)
+            brightness_factor = min(2.0, max(1.0, 120 / avg_brightness))
             image = brightness_enhancer.enhance(brightness_factor)
             logger.info(f"🔆 EXTREME brightness boost: {brightness_factor:.2f}x (very dark image)")
         elif avg_brightness < 120:
             # Moderately dark - strong brightening
-            brightness_factor = min(1.5, 120 / avg_brightness)
+            brightness_factor = min(1.5, max(1.0, 120 / avg_brightness))
             image = brightness_enhancer.enhance(brightness_factor)
             logger.info(f"🔆 Strong brightness boost: {brightness_factor:.2f}x")
 
@@ -141,8 +153,20 @@ def enhance_image_for_analysis(image: Image.Image) -> Image.Image:
 
         return image
 
+    except ImportError as e:
+        logger.error(f"❌ Missing required library for image enhancement: {e}")
+        logger.warning("⚠️ Falling back to basic processing")
+        # Return resized image without enhancement
+        try:
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+            return resize_image_if_needed(image, max_size=(1024, 1024))
+        except Exception as fallback_error:
+            logger.error(f"❌ Even basic processing failed: {fallback_error}")
+            raise
+
     except Exception as e:
-        logger.error(f"❌ Ultra-enhancement failed: {e}")
+        logger.error(f"❌ Ultra-enhancement failed: {e}", exc_info=True)
         # Fallback to basic enhancement
         try:
             from PIL import ImageEnhance
@@ -159,9 +183,15 @@ def enhance_image_for_analysis(image: Image.Image) -> Image.Image:
 
             logger.warning("⚠️ Using fallback basic enhancement")
             return image
-        except:
-            logger.error("❌ All enhancement failed, using original image")
-            return resize_image_if_needed(image, max_size=(1024, 1024))
+        except Exception as fallback_error:
+            logger.error(f"❌ All enhancement failed: {fallback_error}", exc_info=True)
+            # Last resort - return resized original
+            try:
+                return resize_image_if_needed(image, max_size=(1024, 1024))
+            except:
+                # If even resizing fails, return original
+                logger.error("❌ Cannot even resize image, returning original")
+                return image
 
 def format_calories(calories: float) -> str:
     """Format calories for display"""

@@ -218,17 +218,40 @@ class BotHandlers:
                 temp_path = temp_file.name
             
             try:
-                # Open and process image
-                with Image.open(temp_path) as image:
-                    # Convert to RGB if necessary
-                    if image.mode != 'RGB':
-                        image = image.convert('RGB')
+                # Open and process image with detailed error handling
+                logger.info(f"Opening image file: {temp_path}")
+                try:
+                    with Image.open(temp_path) as image:
+                        # Log image properties for debugging
+                        logger.info(f"Image opened successfully - Size: {image.size}, Mode: {image.mode}, Format: {image.format}")
 
-                    # Analyze the image with caption context
-                    analysis_result, error = self.vision_analyzer.analyze_food_image(image, caption)
-                
+                        # Validate image
+                        if image.size[0] < 10 or image.size[1] < 10:
+                            raise ValueError("Image is too small to process")
+
+                        if image.size[0] > 10000 or image.size[1] > 10000:
+                            logger.warning(f"Very large image detected: {image.size}")
+
+                        # Convert to RGB if necessary
+                        if image.mode != 'RGB':
+                            logger.info(f"Converting image from {image.mode} to RGB")
+                            image = image.convert('RGB')
+
+                        # Analyze the image with caption context
+                        logger.info("Starting AI analysis of food image")
+                        analysis_result, error = self.vision_analyzer.analyze_food_image(image, caption)
+                        logger.info(f"AI analysis completed - Success: {analysis_result is not None}, Error: {error}")
+
+                except IOError as io_error:
+                    logger.error(f"Failed to open or read image file: {io_error}")
+                    raise ValueError(f"Cannot identify or read image file: {io_error}")
+                except Exception as img_error:
+                    logger.error(f"Error processing image: {img_error}", exc_info=True)
+                    raise
+
                 # Clean up temp file
                 os.unlink(temp_path)
+                logger.debug(f"Cleaned up temp file: {temp_path}")
                 
                 if error:
                     # Provide more specific error messages based on error type
@@ -331,26 +354,80 @@ class BotHandlers:
                         logger.warning(f"Failed to cleanup temp file {temp_path}: {cleanup_error}")
                 
         except Exception as e:
-            logger.error(f"Error processing photo for user {user_id}: {e}")
+            logger.error(f"Error processing photo for user {user_id}: {e}", exc_info=True)
+
+            # Log detailed error information for debugging
+            error_type = type(e).__name__
+            error_str = str(e).lower()
+            logger.error(f"Error type: {error_type}, Error details: {str(e)}")
 
             # Provide helpful error message based on error type
-            if "Can't parse entities" in str(e):
+            if "can't parse entities" in error_str or "markdown" in error_str:
                 error_message = (
                     "🤖 **Processing Complete**\n\n"
                     "I analyzed your meal but had trouble formatting the response.\n\n"
                     "**Please try sending the photo again for a properly formatted result.**"
                 )
-            elif "timeout" in str(e).lower():
+            elif "timeout" in error_str:
                 error_message = (
                     "⏱️ **Request Timeout**\n\n"
                     "The analysis took too long to complete.\n\n"
                     "**Please try again in a moment.**"
                 )
+            elif "network" in error_str or "connection" in error_str:
+                error_message = (
+                    "🌐 **Connection Issue**\n\n"
+                    "There was a network problem connecting to the AI service.\n\n"
+                    "**Please check your internet connection and try again.**"
+                )
+            elif "image" in error_str or "pil" in error_str or "cannot identify image" in error_str:
+                error_message = (
+                    "📸 **Image Format Issue**\n\n"
+                    "There was a problem reading your photo.\n\n"
+                    "**Tips:**\n"
+                    "• Make sure the image is not corrupted\n"
+                    "• Try taking a new photo\n"
+                    "• Ensure the photo is in a standard format (JPG/PNG)"
+                )
+            elif "numpy" in error_str or "import" in error_str:
+                error_message = (
+                    "⚙️ **System Issue**\n\n"
+                    "There's a temporary system configuration issue.\n\n"
+                    "**The bot administrator has been notified. Please try again in a few minutes.**"
+                )
+            elif "api" in error_str or "openrouter" in error_str or "rate limit" in error_str:
+                error_message = (
+                    "🤖 **AI Service Issue**\n\n"
+                    "The AI analysis service is temporarily unavailable.\n\n"
+                    "**Please try again in a moment.**"
+                )
+            elif "memory" in error_str or "size" in error_str or "too large" in error_str:
+                error_message = (
+                    "📏 **Image Size Issue**\n\n"
+                    "Your image is too large or complex to process.\n\n"
+                    "**Try:**\n"
+                    "• Taking a smaller photo\n"
+                    "• Compressing the image\n"
+                    "• Using your camera's lower resolution setting"
+                )
+            elif "enhancement" in error_str or "filter" in error_str:
+                error_message = (
+                    "🔧 **Image Processing Issue**\n\n"
+                    "There was a problem enhancing your photo.\n\n"
+                    "**Try:**\n"
+                    "• Taking a new photo\n"
+                    "• Using better lighting\n"
+                    "• Ensuring the image is not corrupted"
+                )
             else:
                 error_message = (
                     "❌ **Processing Error**\n\n"
                     "There was an unexpected error analyzing your photo.\n\n"
-                    "**Please try again with a different photo.**"
+                    "**What to try:**\n"
+                    "• Take a clearer photo with better lighting\n"
+                    "• Make sure the food is clearly visible\n"
+                    "• Try again in a moment\n\n"
+                    "If the problem persists, use /help for assistance."
                 )
 
             try:
@@ -358,12 +435,16 @@ class BotHandlers:
                     error_message,
                     parse_mode=ParseMode.MARKDOWN
                 )
-            except Exception:
+            except Exception as msg_error:
+                logger.error(f"Failed to send formatted error message: {msg_error}")
                 # Final fallback - plain text without any formatting
-                await processing_msg.edit_text(
-                    "Sorry, there was an error processing your photo. Please try again.",
-                    parse_mode=None
-                )
+                try:
+                    await processing_msg.edit_text(
+                        "Sorry, there was an error processing your photo. Please try again with a clearer photo or better lighting.",
+                        parse_mode=None
+                    )
+                except Exception as final_error:
+                    logger.error(f"Failed to send even plain text error message: {final_error}")
     
     async def handle_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle text messages"""
